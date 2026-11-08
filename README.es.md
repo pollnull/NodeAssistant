@@ -36,6 +36,7 @@
   tesis?"). Funciona con la [plantilla de bóveda de kepano](https://github.com/kepano/kepano-obsidian).
 - **Resumen del día a las 20:00 por Telegram**, y un bot para usar a Node desde el celular (texto o audios).
 - **Recordatorios, Gmail y Google Calendar, Discord, OBS, GitHub** y el estado de la PC.
+- **Skills:** rutinas y estilos escritos en texto ("modo trabajo", "buenas noches"), sin programar.
 - **Abierto a tus modelos:** cualquier proveedor compatible con OpenAI, cualquier modelo de Ollama, tu propio
   archivo GGUF y tu propia voz de Piper. Todo se configura con `/setup`, sin tocar código.
 - **6 idiomas:** español, inglés, portugués, francés, alemán e italiano. Arranca en el idioma de tu Windows.
@@ -93,7 +94,7 @@ También puedes escribir en la cápsula y apretar Enter. Para cerrarlo: di o esc
 
 Después, **`/settings`** abre los ajustes, por secciones: General (nombre, idioma, inicio con Windows, colores), IA en
 la nube, Modelos locales, Voz y micrófono (voz, largo máximo para leer en voz alta, espera del micrófono), Memoria
-(bóveda, resumen del día y su hora), Herramientas (prender o apagar cada una), Plugins, Servicios (Telegram, Discord, OBS, Cloudflare, Google) y Avanzado
+(bóveda, resumen del día y su hora), Herramientas (prender o apagar cada una), Plugins, Skills, Servicios (Telegram, Discord, OBS, Cloudflare, Google) y Avanzado
 (personalidad, creatividad, Whisper, modo privado).
 
 ### Las claves, por dentro
@@ -171,6 +172,30 @@ sección se apagan o se quitan (quedan en `plugins_quitados/`, por si te arrepie
 - **En tu PC:** `.venv\Scripts\python.exe tools\crear_plugin.py` te hace las mismas preguntas y lo deja en `plugins/`.
 
 Para escribir uno a mano, mira [plugins/LEEME.md](plugins/LEEME.md).
+
+## Skills
+
+Las skills son **instrucciones en texto**, no código: le enseñan a Node *cómo y cuándo* usar lo que ya sabe hacer.
+Una rutina ("modo trabajo" abre tu editor y Obsidian, pone lofi y te muestra las tareas), un estilo ("cuando te hable
+en inglés, corrígeme") o datos tuyos. Cada una es un archivo `.md` en `skills/` con una cabecera corta:
+
+```markdown
+---
+nombre: Modo trabajo
+descripcion: Prepara la PC para trabajar.
+palabras: modo trabajo, a trabajar
+---
+Cuando el usuario quiera ponerse a trabajar, haz esto, una herramienta por paso:
+1. Abre VSCodium y Obsidian.
+2. Pon lofi en Spotify.
+3. Muestra las tareas pendientes.
+```
+
+Una skill se activa cuando dices alguna de sus `palabras` (o siempre, con `siempre: true`). Node trae tres de
+ejemplo: *modo trabajo*, *profe de inglés* y *buenas noches*. Se manejan en `/settings` → **Skills**: prenderlas o
+apagarlas, editarlas en el Bloc de notas, crear una nueva o instalarla desde un enlace o un archivo (entra apagada,
+para que la leas antes). Como son texto, se comparten fácil; lo que cambia algo en tu PC igual te pide confirmación,
+y cualquier herramienta se puede apagar en `/settings` → **Herramientas**.
 
 ## Idiomas
 

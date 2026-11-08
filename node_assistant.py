@@ -399,15 +399,53 @@ for name, words in {
     hint(name, words)
 
 
+# Skills: instrucciones en texto (skills/*.md) que le enseñan a Node cómo y cuándo usar lo que ya sabe hacer: rutinas
+# ("modo trabajo"), estilos ("corrígeme el inglés") o datos tuyos. No son código. Arriba de cada una, entre ---:
+# nombre, descripcion, palabras (las que la activan, separadas por comas) y siempre (true: va en todas las charlas).
+SKILLS_DIR = HERE / 'skills'
+
+
+def load_skills(every=False):
+    """Las skills de skills/ (sin las que apagaste en /settings → Skills, salvo con every=True)."""
+    off, found = set(saved('skills_off', [])), []
+    for path in sorted(SKILLS_DIR.glob('*.md')) if SKILLS_DIR.exists() else []:
+        if path.stem in off and not every:
+            continue
+        text = path.read_text(encoding='utf-8')
+        match = re.match(r'---\s*\n(.*?)\n---\s*\n?(.*)', text, re.S)
+        # "clave: valor" por línea, cortando en el primer ":" (así una descripción con ":" no rompe nada, como en YAML)
+        meta = {key.strip().lower(): value.strip().strip('"\'') for key, _, value in
+                (line.partition(':') for line in (match[1] if match else '').splitlines()) if value.strip()}
+        words = str(meta.get('palabras') or meta.get('words') or '')
+        found.append({'id': path.stem, 'path': path, 'name': str(meta.get('nombre') or meta.get('name') or path.stem),
+                      'about': str(meta.get('descripcion') or meta.get('description') or ''),
+                      'words': [plain(word).strip() for word in words.split(',') if plain(word).strip()],
+                      'always': (meta.get('siempre') or meta.get('always') or '').lower() in ('true', 'si', 'sí', 'yes'),
+                      'body': (match[2] if match else text).strip()[:3000]})
+    return found
+
+
+def skills_for(text):
+    """Las skills que tienen que ver con lo que dijiste (o las que van siempre)."""
+    said = plain(text)
+    return [skill for skill in load_skills() if skill['always'] or any(word in said for word in skill['words'])]
+
+
 def plan_cloud(text):
     """La IA decide: una o varias acciones de TOOLS, o una respuesta. Devuelve [(acción, detalle), ...]."""
+    skills = skills_for(text)
+    guide = ''.join(f'\n\nSkill "{skill["name"]}" (síguela si corresponde a lo que pidió):\n{skill["body"]}'
+                    for skill in skills)
     messages = [{'role': 'system', 'content': system(' Si te piden hacer algo en la computadora, usa las '
-                                                     'herramientas, una por cada cosa pedida; si no, responde tú.')},
+                                                     'herramientas, una por cada cosa pedida; si no, responde tú.'
+                                                     + guide)},
                 *HISTORY, {'role': 'user', 'content': text}]
     calls = []
+    # Las herramientas que nombran las skills también viajan (para el ahorro de cupo cuentan como si lo hubieras dicho).
+    tools = pick_tools(text + ' ' + ' '.join(skill['body'] for skill in skills))
     # El modelo pide de a una acción: "X y después Y" son dos vueltas. Con una sola orden, una sola consulta (más rápido).
-    for _ in range(4 if MANY.search(text.lower()) else 1):
-        message = cloud(messages, tools=pick_tools(text))
+    for _ in range(4 if MANY.search(text.lower()) or skills else 1):
+        message = cloud(messages, tools=tools)
         if not message.get('tool_calls'):
             break
         calls += message['tool_calls']

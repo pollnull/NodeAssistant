@@ -37,6 +37,7 @@
   I write about my thesis?"). Works with [kepano's vault template](https://github.com/kepano/kepano-obsidian).
 - **A summary of your day at 8 PM on Telegram**, and a bot to use Node from your phone (text or voice messages).
 - **Reminders, Gmail and Google Calendar, Discord, OBS, GitHub** and your PC's status.
+- **Skills:** routines and styles written in plain text ("work mode", "good night"), no code needed.
 - **Open to your own models:** any OpenAI-compatible provider, any Ollama model, your own GGUF file and your own
   Piper voice. Everything is set up with `/setup`, no code required.
 - **6 languages:** English, Spanish, Portuguese, French, German and Italian. It starts in your Windows language.
@@ -96,7 +97,7 @@ speak. You can also type in the capsule and press Enter. To close it, say or typ
 
 Afterwards, **`/settings`** opens the settings, by section: General (name, language, start with Windows, colors),
 Cloud AI, Local models, Voice and microphone (voice, maximum length to read aloud, microphone warm-up), Memory (vault,
-daily summary and its time), Tools (turn each one on or off), Plugins, Services (Telegram, Discord, OBS, Cloudflare, Google) and Advanced
+daily summary and its time), Tools (turn each one on or off), Plugins, Skills, Services (Telegram, Discord, OBS, Cloudflare, Google) and Advanced
 (personality, creativity, Whisper, private mode).
 
 ### API keys, under the hood
@@ -177,6 +178,30 @@ mind).
   `plugins/`.
 
 To write one by hand, see [plugins/LEEME.md](plugins/LEEME.md) (in Spanish).
+
+## Skills
+
+Skills are **instructions in plain text**, not code: they teach Node *how and when* to use what it can already do.
+A routine ("work mode" opens your editor and Obsidian, plays lofi and shows your tasks), a style ("when I speak
+English, correct my mistakes") or facts about you. Each one is a `.md` file in `skills/` with a short header:
+
+```markdown
+---
+name: Work mode
+description: Gets the PC ready to work.
+words: work mode, time to work
+---
+When the user wants to start working, do this, one tool per step:
+1. Open VSCodium and Obsidian.
+2. Play some lofi on Spotify.
+3. Show the pending tasks.
+```
+
+A skill kicks in when you say one of its `words` (or always, with `always: true`). Node ships with three examples:
+*work mode*, *English teacher* and *good night*. Manage them in `/settings` → **Skills**: turn them on or off, edit
+them in Notepad, create a new one, or install one from a link or a file (it's added turned off, so you can read it
+first). Since they're just text, they're easy to share; anything that changes something on your PC still asks for
+confirmation, and you can turn off any tool in `/settings` → **Tools**.
 
 ## Languages
 

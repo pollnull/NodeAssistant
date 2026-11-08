@@ -1002,9 +1002,120 @@ def section_tools(body, choice):
                            activebackground=BG, activeforeground=FG).pack(fill='x', padx=(8, 0))
 
 
+SKILL_WARNING = N_('Una skill no es código, pero le da instrucciones a la IA. Instala solo las de alguien en quien '
+                   'confíes y léela antes de prenderla; lo que cambia cosas en tu PC igual te pide confirmación.')
+# Las claves de la cabecera quedan en inglés (Node entiende name/description/words y nombre/descripcion/palabras):
+# solo se traducen los valores, así la plantilla sirve en cualquier idioma.
+SKILL_TEMPLATE = '---\nname: {name}\ndescription: {about}\nwords: {words}\n---\n{body}\n'
+SKILL_PARTS = N_(('Mi skill', 'Para qué sirve, en una frase.', 'palabras que la activan, separadas por comas',
+                  'Cuando el usuario pida …, haz esto, usando una herramienta por paso:\n\n1. …\n2. …\n\n'
+                  'Al final, dile en una frase cómo salió.'))
+
+
+def edit(path):
+    subprocess.Popen(['notepad.exe', str(path)])  # el Bloc de notas: está en todas las PC y edita texto sin vueltas
+
+
+def install_skill(source_name, text, status):
+    """Guarda una skill nueva en skills/ (si tiene la cabecera entre ---), apagada hasta que la leas."""
+    name = re.sub(r'[^a-z0-9_-]', '-', Path(source_name).stem.lower()).strip('-') or 'skill'
+    if not re.match(r'---\s*\n.*?\n---', text, re.S):
+        return status.config(text=node.t('No parece una skill: le falta la cabecera entre --- (nombre, descripcion, '
+                                         'palabras).'), fg=BAD)
+    target = node.SKILLS_DIR / f'{name}.md'
+    if target.exists():
+        return status.config(text=node.t('Ya hay una skill llamada {name}. Quita la vieja primero.', name=name), fg=BAD)
+    node.SKILLS_DIR.mkdir(exist_ok=True)
+    target.write_text(text, encoding='utf-8')
+    off = set(node.saved('skills_off', []))
+    off.add(name)
+    node.save('skills_off', sorted(off))
+    WINDOW['show']()
+    WINDOW['status'].config(text=node.t('Instalé la skill {name}, apagada. Léela y préndela.', name=name), fg=GOOD)
+
+
+def new_skill():
+    node.SKILLS_DIR.mkdir(exist_ok=True)
+    number = 1
+    while (node.SKILLS_DIR / f'mi-skill-{number}.md').exists():
+        number += 1
+    path = node.SKILLS_DIR / f'mi-skill-{number}.md'
+    name, about, words, body = (node.t(part) for part in SKILL_PARTS)
+    path.write_text(SKILL_TEMPLATE.format(name=name, about=about, words=words, body=body), encoding='utf-8')
+    edit(path)
+    WINDOW['show']()
+    WINDOW['status'].config(text=node.t('Escribe tu skill en el Bloc de notas y guarda: queda prendida.'), fg=GOOD)
+
+
+def remove_skill(path):
+    target = node.HERE / 'skills_quitadas'
+    target.mkdir(exist_ok=True)
+    shutil.move(str(path), str(target / path.name))
+    WINDOW['show']()
+    WINDOW['status'].config(text=node.t('Quité {name} (quedó en skills_quitadas).', name=path.stem), fg=GOOD)
+
+
+def section_skills(body, choice):
+    label(body, node.t('Skills'), FG, TITLE, pady=(0, 6))
+    label(body, node.t('Instrucciones en texto que le enseñan a Node cómo y cuándo usar lo que ya sabe hacer: rutinas '
+                       '("modo trabajo"), estilos ("corrígeme el inglés") o datos tuyos. Una skill se activa cuando '
+                       'dices alguna de sus palabras. Se aplica al instante.'), pady=(0, 4))
+    label(body, node.t(SKILL_WARNING), '#ffd479', TINY, pady=(0, 8))
+    off = set(node.saved('skills_off', []))
+    for skill in node.load_skills(every=True):
+        line = row(body)
+        on = tk.BooleanVar(value=skill['id'] not in off)
+
+        def flip(name=skill['id'], var=on):
+            now = set(node.saved('skills_off', []))
+            (now.discard if var.get() else now.add)(name)
+            node.save('skills_off', sorted(now))
+        tk.Checkbutton(line, variable=on, bg=BG, activebackground=BG, selectcolor=FIELD, relief='flat',
+                       command=flip).pack(side='left')
+        text = tk.Frame(line, bg=BG)
+        text.pack(side='left', fill='x', expand=True)
+        tk.Label(text, text=skill['name'], bg=BG, fg=FG, font=FONT, anchor='w').pack(fill='x')
+        words = ', '.join(skill['words'][:4]) if not skill['always'] else node.t('siempre')
+        tk.Label(text, text=f"{skill['about']}  ·  {words}"[:140], bg=BG, fg=SOFT, font=TINY, anchor='w',
+                 justify='left', wraplength=380).pack(fill='x')
+        button(line, node.t('Quitar'), (lambda p: lambda: remove_skill(p))(skill['path'])).pack(side='right')
+        button(line, node.t('Editar'), (lambda p: lambda: edit(p))(skill['path'])).pack(side='right', padx=4)
+    button(body, node.t('+ Nueva skill'), new_skill, accent=True).pack(anchor='w', pady=(12, 0))
+    label(body, node.t('Instalar una skill'), FG, FONT, pady=(14, 2))
+    status = label(body, '')
+    line = row(body)
+    link = entry(line)
+    link.pack(side='left', fill='x', expand=True, ipady=4)
+
+    def from_link():
+        url = raw_link(link.get().strip())
+        if not url.startswith('https://'):
+            return status.config(text=node.t('Pega un enlace https a un archivo .md (por ejemplo de GitHub).'), fg=BAD)
+        status.config(text=node.t('Bajando…'), fg=SOFT)
+
+        def work():
+            request = urllib.request.Request(url, headers={'User-Agent': 'NodeAssistant'})
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return response.read(64_000).decode('utf-8')
+
+        def done(text, error):
+            if error:
+                return status.config(text=node.t('No pude bajarla: {error}.', error=problem(error)), fg=BAD)
+            install_skill(urllib.parse.urlparse(url).path, text, status)
+        in_background(body, work, done)
+    button(line, node.t('Instalar desde enlace'), from_link).pack(side='left', padx=(6, 0))
+
+    def from_file():
+        path = filedialog.askopenfilename(parent=body.winfo_toplevel(), title=node.t('Una skill de Node'),
+                                          filetypes=[(node.t('Skill de Node'), '*.md')])
+        if path:
+            install_skill(path, Path(path).read_text(encoding='utf-8'), status)
+    button(body, node.t('Instalar desde un archivo…'), from_file).pack(anchor='w', pady=(6, 0))
+
+
 SECTIONS = N_([('General', section_general), ('IA en la nube', page_cloud), ('Modelos locales', page_local),
                ('Voz y micrófono', section_voice), ('Memoria', section_memory), ('Herramientas', section_tools),
-               ('Plugins', section_plugins), ('Servicios', section_services), ('Avanzado', section_advanced)])
+               ('Plugins', section_plugins), ('Skills', section_skills), ('Servicios', section_services), ('Avanzado', section_advanced)])
 
 
 def page_done(body, choice):
