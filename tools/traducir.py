@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
-MARKERS = {'t', 'N_', 'field', 'number'}  # funciones cuyos textos se traducen
+MARKERS = {'t', 'N_', 'field', 'number', 'tool'}  # funciones cuyos textos se traducen (tool: para /settings)
 BATCH = 40
 
 

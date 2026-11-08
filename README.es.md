@@ -93,7 +93,7 @@ También puedes escribir en la cápsula y apretar Enter. Para cerrarlo: di o esc
 
 Después, **`/settings`** abre los ajustes, por secciones: General (nombre, idioma, inicio con Windows, colores), IA en
 la nube, Modelos locales, Voz y micrófono (voz, largo máximo para leer en voz alta, espera del micrófono), Memoria
-(bóveda, resumen del día y su hora), Plugins, Servicios (Telegram, Discord, OBS, Cloudflare, Google) y Avanzado
+(bóveda, resumen del día y su hora), Herramientas (prender o apagar cada una), Plugins, Servicios (Telegram, Discord, OBS, Cloudflare, Google) y Avanzado
 (personalidad, creatividad, Whisper, modo privado).
 
 ### Las claves, por dentro

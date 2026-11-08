@@ -96,7 +96,7 @@ speak. You can also type in the capsule and press Enter. To close it, say or typ
 
 Afterwards, **`/settings`** opens the settings, by section: General (name, language, start with Windows, colors),
 Cloud AI, Local models, Voice and microphone (voice, maximum length to read aloud, microphone warm-up), Memory (vault,
-daily summary and its time), Plugins, Services (Telegram, Discord, OBS, Cloudflare, Google) and Advanced
+daily summary and its time), Tools (turn each one on or off), Plugins, Services (Telegram, Discord, OBS, Cloudflare, Google) and Advanced
 (personality, creativity, Whisper, private mode).
 
 ### API keys, under the hood

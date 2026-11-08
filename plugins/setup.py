@@ -976,9 +976,35 @@ def remove_plugin(path):
     WINDOW['status'].config(text=node.t('Quité {stem} (quedó en plugins_quitados). Se aplica al reiniciar.', stem=path.stem), fg=GOOD)
 
 
+def section_tools(body, choice):
+    """Cada herramienta (lo que Node puede hacer en la PC), agrupada por el plugin que la trae, para prenderla o apagarla."""
+    label(body, node.t('Herramientas'), FG, TITLE, pady=(0, 6))
+    label(body, node.t('Lo que Node puede hacer en tu PC. Apaga lo que no quieras que haga: la IA deja de verlo y, si '
+                       'igual se lo pides, te avisa que está apagado. Se aplica al instante.'), pady=(0, 6))
+    groups = {}
+    for tool_ in node.TOOLS:
+        handler = node.PLUGINS.get(tool_['function']['name'])
+        group = handler.__module__.replace('plugin_', '') if handler else 'Node'
+        groups.setdefault(group, []).append(tool_['function'])
+    for group, tools in groups.items():
+        label(body, group, FG, FONT, pady=(10, 0))
+        for function in tools:
+            about = node.t(function['description'])
+            about = re.split(r'(?<=[.:])\s', about, maxsplit=1)[0].rstrip('.:')  # la primera frase
+            on = tk.BooleanVar(value=function['name'] not in node.saved('tools_off', []))
+
+            def flip(name=function['name'], var=on):
+                off = set(node.saved('tools_off', []))
+                (off.discard if var.get() else off.add)(name)
+                node.save('tools_off', sorted(off))
+            tk.Checkbutton(body, text=f"{function['name']}  ·  {about[:140]}", variable=on, command=flip, bg=BG,
+                           fg=FG, selectcolor=FIELD, font=SMALL, anchor='w', justify='left', wraplength=520,
+                           activebackground=BG, activeforeground=FG).pack(fill='x', padx=(8, 0))
+
+
 SECTIONS = N_([('General', section_general), ('IA en la nube', page_cloud), ('Modelos locales', page_local),
-            ('Voz y micrófono', section_voice), ('Memoria', section_memory), ('Plugins', section_plugins),
-            ('Servicios', section_services), ('Avanzado', section_advanced)])
+               ('Voz y micrófono', section_voice), ('Memoria', section_memory), ('Herramientas', section_tools),
+               ('Plugins', section_plugins), ('Servicios', section_services), ('Avanzado', section_advanced)])
 
 
 def page_done(body, choice):

@@ -376,11 +376,14 @@ def plain(text):
 
 
 def pick_tools(text):
-    """Las herramientas para esta orden. Mira también lo anterior que dijiste ("y bájale más")."""
+    """Las herramientas para esta orden (sin las que apagaste en /settings → Herramientas). Mira también lo anterior
+    que dijiste ("y bájale más")."""
+    off = set(saved('tools_off', []))
+    tools = [tool_ for tool_ in TOOLS if tool_['function']['name'] not in off]
     if not SAVE_QUOTA:
-        return TOOLS
+        return tools
     said = plain(text + ' ' + ' '.join(turn['content'] for turn in HISTORY[-2:] if turn['role'] == 'user'))
-    return [tool_ for tool_ in TOOLS if (found := TOOL_HINTS.get(tool_['function']['name'])) is None
+    return [tool_ for tool_ in tools if (found := TOOL_HINTS.get(tool_['function']['name'])) is None
             or found.search(said)]
 
 
@@ -862,6 +865,8 @@ def press(*keys):
 
 def act(action, detail, mood, where='pc'):
     """Hace la acción y devuelve qué decir. where: 'pc' (la cápsula) o el canal desde donde se pidió ('telegram')."""
+    if action in saved('tools_off', []):  # también si la pidió una regla sin internet
+        return t('Eso lo tengo apagado: lo prendes en /settings → Herramientas.')
     if action in PLUGINS:
         return PLUGINS[action](detail, where)
     if action == 'open':
