@@ -1,0 +1,6 @@
+faster-whisper>=1.2
+piper-tts>=1.8
+numpy>=2.0
+sounddevice>=0.5
+PyYAML>=6.0
+obsws-python>=1.8

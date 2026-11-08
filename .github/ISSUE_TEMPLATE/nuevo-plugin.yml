@@ -1,0 +1,61 @@
+name: Nuevo plugin
+description: Describe el plugin que quieres y una Action lo arma y abre un pull request con él.
+title: "Plugin: "
+labels: [nuevo-plugin]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Completa los datos y, al crear el issue, una Action arma el plugin, lo prueba y abre un pull request.
+        Te deja un comentario acá con avisos si la página probablemente no funcione (sitios que piden iniciar
+        sesión, bloquean robots, usan Cloudflare o se arman con JavaScript). Si editas el issue, se vuelve a armar.
+  - type: input
+    id: nombre
+    attributes:
+      label: Nombre del plugin
+      placeholder: Diccionario
+    validations:
+      required: true
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Qué hace
+      description: Para que la IA sepa cuándo usarlo. Corto y claro.
+      placeholder: Busca el significado de una palabra en español.
+    validations:
+      required: true
+  - type: input
+    id: ejemplos
+    attributes:
+      label: Frases de ejemplo
+      placeholder: '"¿qué significa efímero?", "busca la palabra resiliencia"'
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo
+      options:
+        - Consultar una API web (devuelve datos JSON)
+        - Abrir una página con una búsqueda
+        - Abrir un programa, una carpeta o una página
+    validations:
+      required: true
+  - type: input
+    id: direccion
+    attributes:
+      label: Dirección
+      description: Para los dos primeros tipos, pon {consulta} donde va lo que pides. Para abrir, el programa o la página.
+      placeholder: https://api.dictionaryapi.dev/api/v2/entries/es/{consulta}
+    validations:
+      required: true
+  - type: input
+    id: clave
+    attributes:
+      label: Clave (opcional)
+      description: Si la API pide una clave, el nombre de la variable de Windows donde la vas a guardar. Nunca pongas la clave acá.
+      placeholder: DICCIONARIO_API_KEY
+  - type: input
+    id: palabras
+    attributes:
+      label: Palabras clave (opcional)
+      description: Separadas por comas. Si las pones, a la IA solo le llega este plugin cuando dices alguna (ahorra cupo).
+      placeholder: significa, significado, definicion, palabra

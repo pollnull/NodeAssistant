@@ -1,0 +1,49 @@
+# Arma un plugin a partir de un issue "Nuevo plugin" (.github/ISSUE_TEMPLATE/nuevo-plugin.yml), lo prueba y abre un
+# pull request. El texto del issue se pasa como archivo, nunca dentro de un comando: así nadie puede colar órdenes.
+# Hace falta, una vez: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+name: Nuevo plugin
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  armar:
+    if: contains(github.event.issue.labels.*.name, 'nuevo-plugin')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Armar y probar el plugin
+        id: armar
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$ISSUE_BODY" > "$RUNNER_TEMP/issue.md"
+          python tools/crear_plugin.py --issue "$RUNNER_TEMP/issue.md" --report "$RUNNER_TEMP/informe.md" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Abrir el pull request
+        if: steps.armar.outputs.ok == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: plugin/${{ steps.armar.outputs.name }}
+          title: 'Plugin nuevo: ${{ steps.armar.outputs.name }}'
+          commit-message: 'Plugin nuevo: ${{ steps.armar.outputs.name }} (issue #${{ github.event.issue.number }})'
+          body-path: ${{ runner.temp }}/informe.md
+          add-paths: plugins/${{ steps.armar.outputs.name }}.py
+
+      - name: Contar cómo salió en el issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$NUMBER" --body-file "$RUNNER_TEMP/informe.md"

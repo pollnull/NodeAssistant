@@ -1,0 +1,26 @@
+# Entorno de Python
+.venv/
+__pycache__/
+*.pyc
+
+# Voces de Piper (pesan ~60 MB cada una: se descargan, ver README)
+voices/
+
+# Tus datos y ajustes: se crean solos al usar Node
+ajustes.json
+colores.json
+uso.json
+recordatorios.json
+ubicacion.json
+proveedores.json
+
+# Acceso a tu Google (Gmail y Calendar): son como contraseñas
+google_cliente.json
+google_token.json
+
+# Notas y pruebas locales
+comparacion-modelos.md
+captura-capsula.png
+muestra-*.wav
+*.log
+plugins_quitados/
