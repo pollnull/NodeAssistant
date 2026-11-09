@@ -1,15 +1,15 @@
 """Bot de Telegram: usa a Node desde el celular. Escríbele o mándale audios; hace lo mismo que en la PC y te contesta.
 Los recordatorios también te llegan ahí, y "mándame una captura" te manda una foto de toda la pantalla.
 
-Una sola vez:
-1. En Telegram, habla con @BotFather -> /newbot -> te da un token. Guárdalo en Windows (PowerShell):
-   [Environment]::SetEnvironmentVariable('TELEGRAM_BOT_TOKEN', 'EL-TOKEN', 'User')
-2. Reinicia Node y escríbele cualquier cosa a tu bot: te responde con tu número de chat. Guárdalo igual:
-   [Environment]::SetEnvironmentVariable('TELEGRAM_CHAT_ID', 'EL-NUMERO', 'User')
-Desde ahí el bot solo obedece a ese chat: a cualquier otra persona solo le dice su número, nunca hace nada.
-Funciona mientras la PC esté prendida y Node abierto.
+Cada persona crea su propio bot (el token queda en las variables de Windows de su PC, nunca en el código), y se
+vincula en /settings → Servicios → Telegram:
+1. Con @BotFather -> /newbot crea tu bot y pega su token.
+2. Toca "Vincular": Node muestra un código de 6 dígitos en tu pantalla. Mándaselo a tu bot y queda atado a tu chat.
+Solo quien ve tu pantalla puede vincularse, y el código vence a los 10 minutos. Desde ahí el bot solo obedece a ese
+chat: a cualquier otra persona no le responde nada. Funciona mientras la PC esté prendida y Node abierto.
 """
 import json
+import secrets
 import threading
 import time
 import urllib.request
@@ -66,10 +66,24 @@ def answer(message):
     send(chat, heard + reply)
 
 
+PAIRING = {'code': None, 'until': 0, 'chat': None}  # el código que muestra /settings para vincular tu chat
+STATE = {'running': False}
+
+
+def pair_code(minutes=10):
+    """Un código nuevo de 6 dígitos para vincular el bot con tu chat (lo muestra /settings). Vence solo."""
+    PAIRING.update(code=f'{secrets.randbelow(1_000_000):06d}', until=time.time() + minutes * 60, chat=None)
+    return PAIRING['code']
+
+
+def notify_mine(text):
+    """Los avisos (recordatorios) también te llegan al celular, al chat vinculado."""
+    if mine := node.secret('TELEGRAM_CHAT_ID'):
+        send(mine, f'⏰ {text}')
+
+
 def poll():
-    offset, mine = None, node.secret('TELEGRAM_CHAT_ID')
-    if mine:
-        node.LISTENERS.append(lambda text: send(mine, f'⏰ {text}'))
+    offset = None
     try:  # el botón de menú de Telegram, con los mismos comandos que /help (/tgtoggle, /opsec…)
         api('setMyCommands', commands=[{'command': name[1:], 'description': description[:256]}
                                        for name, (description, _) in sorted(node.COMMANDS.items())])
@@ -86,13 +100,22 @@ def poll():
             message = update.get('message')
             if not message:
                 continue
-            chat = str(message['chat']['id'])
+            chat, fresh = str(message['chat']['id']), time.time() - message['date'] < 120  # viejas: PC apagada
+            mine = node.secret('TELEGRAM_CHAT_ID')  # se lee cada vez: cambia al vincular o desvincular
             try:
-                if chat != mine:  # un desconocido (o tú antes de vincular): solo su número, nada más
-                    if not mine:
-                        send(chat, node.t('Este bot es privado. Para vincularlo con Node, tu número de chat es {chat}.', chat=chat))
-                elif time.time() - message['date'] < 120:  # órdenes viejas (con la PC apagada) no se ejecutan
-                    answer(message)
+                if chat == mine:
+                    if fresh:
+                        answer(message)
+                elif fresh and PAIRING['code'] and time.time() < PAIRING['until'] \
+                        and (message.get('text') or '').strip() == PAIRING['code']:
+                    node.save_secret('TELEGRAM_CHAT_ID', chat)  # el código de tu pantalla: este chat es el tuyo
+                    PAIRING.update(code=None, chat=chat)
+                    send(chat, node.t('Listo, quedamos vinculados: desde ahora solo te obedezco a ti.') + '\n\n' +
+                         node.t(HELP))
+                elif not mine and fresh:  # sin vincular todavía: cómo hacerlo (a nadie le hace caso)
+                    send(chat, node.t('Este bot es privado. Para vincularlo, abre /settings → Servicios → Telegram en '
+                                      'la PC donde está Node y mándame el código que aparece ahí.'))
+                # vinculado a otro chat: a un desconocido no se le responde nada
             except Exception as error:  # que un error no corte el bot
                 try:
                     send(chat, f'Error: {error}')
@@ -100,8 +123,15 @@ def poll():
                     pass
 
 
+def start():
+    """Prende el bot si hay token y no está andando (al abrir Node, o al pegar el token en /settings)."""
+    if node.secret('TELEGRAM_BOT_TOKEN') and not STATE['running']:
+        STATE['running'] = True
+        threading.Thread(target=poll, daemon=True).start()
+
+
 def setup(node_):
     global node
     node = node_
-    if node.secret('TELEGRAM_BOT_TOKEN'):
-        node.STARTERS.append(lambda: threading.Thread(target=poll, daemon=True).start())
+    node.LISTENERS.append(notify_mine)
+    node.STARTERS.append(start)

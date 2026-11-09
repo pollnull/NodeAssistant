@@ -191,6 +191,25 @@ def secret(name):
         return None
 
 
+def save_secret(name, value):
+    """Guarda una clave como variable de entorno de tu usuario (como SetEnvironmentVariable 'User') y avisa a Windows."""
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_SET_VALUE) as env:
+        winreg.SetValueEx(env, name, 0, winreg.REG_SZ, value)
+    os.environ[name] = value
+    ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x1A, 0, 'Environment', 2, 1000, None)  # WM_SETTINGCHANGE
+
+
+def delete_secret(name):
+    """Borra una clave de las variables de Windows (por ejemplo, para desvincular Telegram)."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_SET_VALUE) as env:
+            winreg.DeleteValue(env, name)
+    except OSError:  # ya no estaba
+        pass
+    os.environ.pop(name, None)
+    ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x1A, 0, 'Environment', 2, 1000, None)
+
+
 # Las plataformas en la nube, en orden: si una falla o se queda sin cupo, Node pasa sola a la siguiente.
 # Si fallan todas (o no hay internet), decide con las reglas y Laya y charla con llama3.2 local.
 PROVIDERS = [

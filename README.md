@@ -36,6 +36,8 @@
   movies, I give it a 9", "how much did I spend this month?"), a daily note and questions about your notes ("what did
   I write about my thesis?"). Works with [kepano's vault template](https://github.com/kepano/kepano-obsidian).
 - **A summary of your day at 8 PM on Telegram**, and a bot to use Node from your phone (text or voice messages).
+  Everyone creates **their own bot**, tied to their PC: in `/settings` → Services → Telegram you paste its token and
+  send it a 6-digit code shown on your screen. From then on it only obeys your chat.
 - **Reminders, Gmail and Google Calendar, Discord, OBS, GitHub** and your PC's status.
 - **Skills:** routines and styles written in plain text ("work mode", "good night"), no code needed.
 - **Open to your own models:** any OpenAI-compatible provider, any Ollama model, your own GGUF file and your own

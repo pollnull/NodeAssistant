@@ -35,6 +35,8 @@
   películas, le doy 9", "¿cuánto gasté este mes?"), una nota por día y preguntas a tus notas ("¿qué anoté sobre la
   tesis?"). Funciona con la [plantilla de bóveda de kepano](https://github.com/kepano/kepano-obsidian).
 - **Resumen del día a las 20:00 por Telegram**, y un bot para usar a Node desde el celular (texto o audios).
+  Cada persona crea **su propio bot**, atado a su PC: en `/settings` → Servicios → Telegram pegas su token y le
+  mandas un código de 6 dígitos que aparece en tu pantalla. Desde ahí solo obedece a tu chat.
 - **Recordatorios, Gmail y Google Calendar, Discord, OBS, GitHub** y el estado de la PC.
 - **Skills:** rutinas y estilos escritos en texto ("modo trabajo", "buenas noches"), sin programar.
 - **Abierto a tus modelos:** cualquier proveedor compatible con OpenAI, cualquier modelo de Ollama, tu propio

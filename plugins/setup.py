@@ -98,11 +98,7 @@ def problem(error):
 
 
 def save_key(name, value):
-    """La clave como variable de entorno de tu usuario (lo mismo que SetEnvironmentVariable 'User'), y avisa a Windows."""
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_SET_VALUE) as env:
-        winreg.SetValueEx(env, name, 0, winreg.REG_SZ, value)
-    os.environ[name] = value
-    ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x1A, 0, 'Environment', 2, 1000, None)  # WM_SETTINGCHANGE
+    node.save_secret(name, value)  # en las variables de Windows de tu usuario, nunca en un archivo
 
 
 def mine():
@@ -796,9 +792,6 @@ def section_memory(body, choice):
 
 
 SERVICES = N_([  # (servicio, variable de Windows, dónde se consigue, si es secreta)
-    ('Telegram: token del bot', 'TELEGRAM_BOT_TOKEN', 'Habla con @BotFather en Telegram → /newbot.', True),
-    ('Telegram: tu número de chat', 'TELEGRAM_CHAT_ID', 'Reinicia Node y escríbele a tu bot: te contesta tu número.',
-     False),
     ('Discord: webhook', 'DISCORD_WEBHOOK_URL', 'En el canal: Editar canal → Integraciones → Webhooks → Copiar URL.',
      True),
     ('OBS: contraseña del WebSocket', 'OBS_WEBSOCKET_PASSWORD', 'En OBS: Herramientas → Ajustes del servidor '
@@ -807,9 +800,66 @@ SERVICES = N_([  # (servicio, variable de Windows, dónde se consigue, si es sec
 ])
 
 
+def telegram_block(body):
+    """Tu propio bot, atado a tu PC: crearlo con @BotFather, pegar su token y vincular tu chat con un código."""
+    label(body, node.t('Telegram'), FG, FONT, pady=(6, 2))
+    bot = sys.modules.get('plugin_telegram')
+    if not bot:
+        return label(body, node.t('El plugin telegram está apagado (/settings → Plugins).'), font=TINY)
+    label(body, node.t('Cada persona usa su propio bot: el tuyo queda atado a tu PC y solo te obedece a ti.'), font=TINY)
+    if node.secret('TELEGRAM_CHAT_ID') and node.secret('TELEGRAM_BOT_TOKEN'):
+        label(body, node.t('Vinculado: tu bot solo te obedece a ti.'), GOOD)
+
+        def unlink():
+            node.delete_secret('TELEGRAM_CHAT_ID')
+            WINDOW['show']()
+        return button(body, node.t('Desvincular'), unlink).pack(anchor='w', pady=(4, 0))
+    line = row(body)
+    tk.Label(line, text=node.t('1. Crea tu bot:'), bg=BG, fg=FG, font=SMALL).pack(side='left')
+    button(line, node.t('Abrir @BotFather'), lambda: webbrowser.open('https://t.me/BotFather')).pack(side='left', padx=6)
+    label(body, node.t('Escríbele /newbot, elige un nombre y copia el token que te da.'), font=TINY)
+    label(body, node.t('2. Pega el token:'), FG, SMALL, pady=(8, 2))
+    line = row(body)
+    token = entry(line, show='•')
+    token.pack(side='left', fill='x', expand=True, ipady=4)
+    if node.secret('TELEGRAM_BOT_TOKEN'):
+        label(body, node.t('Ya hay un token guardado.'), GOOD, TINY)
+
+    def keep():
+        if token.get().strip():
+            save_key('TELEGRAM_BOT_TOKEN', token.get().strip())
+            bot.start()  # sin reiniciar: el bot empieza a escuchar ya
+            WINDOW['show']()
+    button(line, node.t('Guardar'), keep).pack(side='left', padx=(6, 0))
+    label(body, node.t('3. Vincula tu chat:'), FG, SMALL, pady=(8, 2))
+    shown = label(body, '', FG, TITLE)
+    status = label(body, '')
+
+    def link():
+        if not node.secret('TELEGRAM_BOT_TOKEN'):
+            return status.config(text=node.t('Primero guarda el token de tu bot.'), fg=BAD)
+        bot.start()
+        code = bot.pair_code()
+        shown.config(text=code)
+        status.config(text=node.t('Mándale este código a tu bot en Telegram. Vence en 10 minutos.'), fg=SOFT)
+
+        def wait():
+            if not shown.winfo_exists():
+                return
+            if bot.PAIRING['chat']:
+                return WINDOW['show']()
+            if bot.PAIRING['code'] != code or time.time() > bot.PAIRING['until']:
+                shown.config(text='')
+                return status.config(text=node.t('El código venció. Toca Vincular otra vez.'), fg=BAD)
+            shown.after(1000, wait)
+        wait()
+    button(body, node.t('Vincular'), link, accent=True).pack(anchor='w', pady=(2, 0))
+
+
 def section_services(body, choice):
     label(body, node.t('Servicios'), FG, TITLE, pady=(0, 6))
     label(body, node.t('Para que use tus cuentas. Las claves van a las variables de Windows de tu usuario, nunca a un archivo, y se aplican al reiniciar.'), pady=(0, 4))
+    telegram_block(body)
     status = label(body, '')
     for title, env, hint, hidden in SERVICES:
         label(body, node.t(title), FG, FONT, pady=(6, 2))
