@@ -47,7 +47,24 @@
 - **6 idiomas:** español, inglés, portugués, francés, alemán e italiano. Arranca en el idioma de tu Windows.
 - **Modo privado (`/opsec`):** nada sale de tu PC; usa solo modelos locales.
 
-## Quick Start
+## Instalar (la forma fácil)
+
+Descarga el instalador para tu PC desde el [último release](https://github.com/pollnull/NodeAssistant/releases/latest):
+
+- **`NodeAssistant-…-setup-x64.exe`**: la mayoría de las PC con Windows (Intel o AMD).
+- **`NodeAssistant-…-setup-arm64.exe`**: Windows en ARM (Snapdragon). Funciona todo menos dos piezas que todavía no
+  existen para ARM: entenderte sin internet (Whisper; ahí te entiende Groq, en la nube) y la voz Piper (ahí habla
+  Kokoro o ElevenLabs).
+
+Se instala para tu usuario (sin pedir administrador), suma Node al menú Inicio y la primera vez abre `/setup`.
+Actualizar es instalar la versión nueva encima: tus ajustes, plugins, skills y voces se conservan. No hace falta
+Python. Windows SmartScreen puede avisar porque el instalador no está firmado: *Más información → Ejecutar de todas
+formas*.
+
+Los instaladores los arma GitHub Actions (`.github/workflows/instaladores.yml`), cada uno en su arquitectura. Para
+armar el `.exe` tú: `.venv\Scripts\python.exe installer\build.py`.
+
+## Quick Start (desde el código)
 
 ### 1. Lo que necesitas
 

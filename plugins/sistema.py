@@ -17,7 +17,7 @@ node = None
 HIDDEN = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 # Nunca se cierran: son partes de Windows (o Node mismo)
 PROTECTED = {'system', 'csrss.exe', 'wininit.exe', 'winlogon.exe', 'services.exe', 'lsass.exe', 'svchost.exe',
-             'dwm.exe', 'explorer.exe', 'smss.exe', 'fontdrvhost.exe', 'sihost.exe', 'pythonw.exe', 'python.exe',
+             'dwm.exe', 'explorer.exe', 'smss.exe', 'fontdrvhost.exe', 'sihost.exe', 'pythonw.exe', 'python.exe', 'NodeAssistant.exe',
              'conhost.exe', 'runtimebroker.exe', 'searchhost.exe', 'startmenuexperiencehost.exe', 'ctfmon.exe'}
 
 

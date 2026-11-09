@@ -1,0 +1,89 @@
+# Arma los instaladores de Node para x64 y ARM64. Cada .exe se compila en su propia arquitectura (sin emulación):
+# x64 en windows-latest y ARM64 en windows-11-arm. Después, Inno Setup los empaqueta en setup.exe.
+# Al subir una etiqueta vX.Y.Z, los dos instaladores se publican en un Release; a mano (Run workflow) quedan como
+# artefactos para descargar y probar.
+name: Instaladores
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.arch }}
+
+      - name: Instalar las librerías (en ARM64 no hay Whisper local ni Piper)
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Armar NodeAssistant.exe
+        run: python installer/build.py
+
+      - name: Comprobar que el exe arranca (con --stop abre, carga todo y se cierra)
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\NodeAssistant\NodeAssistant.exe -ArgumentList '--stop' -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); throw 'NodeAssistant.exe no terminó' }
+          if ($p.ExitCode -ne 0) { throw "NodeAssistant.exe terminó con código $($p.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NodeAssistant-${{ matrix.arch }}
+          path: dist/NodeAssistant
+
+  setup:
+    needs: exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compilar los instaladores
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { "0.0.0-dev.$env:GITHUB_RUN_NUMBER" }
+          foreach ($arch in 'x64', 'arm64') {
+            & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DArch=$arch" "/DVersion=$version" "/DSource=..\dist\NodeAssistant-$arch" installer\NodeAssistant.iss
+            if ($LASTEXITCODE -ne 0) { throw "ISCC falló para $arch" }
+          }
+          Get-ChildItem dist\*.exe | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instaladores
+          path: dist/*.exe
+
+      - name: Publicar en el Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          gh release view $env:TAG 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release create $env:TAG --title "Node Assistant $env:TAG" --generate-notes }
+          gh release upload $env:TAG (Get-ChildItem dist\*.exe).FullName --clobber

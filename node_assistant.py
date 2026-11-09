@@ -42,10 +42,23 @@ from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
-from piper import PiperVoice
+FROZEN = getattr(sys, 'frozen', False)  # empaquetado como NodeAssistant.exe (el instalador)
+# La carpeta de Node: la del .exe (plugins/, skills/, voces y ajustes van al lado) o la del código.
+HERE = Path(sys.executable).parent if FROZEN else Path(__file__).parent
+if FROZEN:  # sin consola: los errores (un plugin que no carga…) quedan en node.log, al lado del .exe
+    sys.stdout = sys.stderr = open(HERE / 'node.log', 'a', encoding='utf-8', buffering=1)
 
-HERE = Path(__file__).parent
+
+def has(module):
+    """Si una librería opcional está instalada (Whisper y Piper no existen para ARM64)."""
+    return importlib.util.find_spec(module) is not None
+
+
+def launch_command():
+    """Cómo se abre Node (para reiniciar e iniciar con Windows): el .exe, o pythonw con el código."""
+    if FROZEN:
+        return f'"{sys.executable}"'
+    return f'"{Path(sys.executable).with_name("pythonw.exe")}" "{HERE / "node_assistant.py"}"'
 SETTINGS = HERE / 'ajustes.json'  # lo que eliges en /setup y con comandos; sigue después de reiniciar
 
 
@@ -653,6 +666,8 @@ def transcribe(audio, filename='voz.wav'):
                 return response.read().decode('utf-8').strip()
         except OSError:  # sin cupo o sin internet (HTTPError también es OSError): un minuto con Whisper local
             pause('Groq voz', 60)
+    if not whisper_ready():  # sin Whisper (ARM64, o sin descargar) y sin Groq: no hay cómo entender
+        raise ConnectionError(t('Para entenderte necesito la clave de Groq o Whisper descargado (/settings → Voz).'))
     segments, _ = model('ears').transcribe(audio if isinstance(audio, np.ndarray) else io.BytesIO(data), language=LANGUAGE)
     return ' '.join(segment.text for segment in segments).strip()
 
@@ -662,14 +677,15 @@ LEVEL = {'now': 0.0, 'live': False}  # volumen del micrófono (0 a 1) y si ya es
 
 
 def whisper_ready():
-    """Si el modelo de Whisper ya está descargado (la primera vez baja ~460 MB)."""
-    return (Path.home() / '.cache' / 'huggingface' / 'hub' / f'models--Systran--faster-whisper-{HEARING}').exists()
+    """Si el modelo de Whisper ya está descargado (la primera vez baja ~460 MB) y se puede usar en esta PC."""
+    return has('faster_whisper') and (Path.home() / '.cache' / 'huggingface' / 'hub' / f'models--Systran--faster-whisper-{HEARING}').exists()
 
 
 def model(name):
     """Carga Whisper y la voz una sola vez (la primera carga tarda unos segundos)."""
     if name not in _models:
         if name == 'ears':
+            from faster_whisper import WhisperModel
             _models[name] = WhisperModel(HEARING, device='cpu', compute_type='int8')
         elif name == 'kokoro':  # solo si la elegiste: no hace falta tenerla instalada
             import onnxruntime
@@ -683,6 +699,7 @@ def model(name):
             _models[name] = Kokoro.from_session(session, str(KOKORO_DIR / 'voices-v1.0.bin'))
             _models[name].create('Hola.', voice=kokoro_voices_all(_models[name])[0], lang='es')  # la primera es lenta
         else:
+            from piper import PiperVoice
             _models[name] = PiperVoice.load(VOICE)
     return _models[name]
 
@@ -903,6 +920,7 @@ KOKORO_FILES = {'kokoro-v1.0.int8.onnx': 'https://github.com/thewh1teagle/kokoro
                                    'voices-v1.0.bin'}
 KOKORO_LANGS = {'es': ('es', ('ef_', 'em_')), 'en': ('en-us', ('af_', 'am_', 'bf_', 'bm_')), 'fr': ('fr-fr', ('ff_',)),
                 'it': ('it', ('if_', 'im_')), 'pt': ('pt-br', ('pf_', 'pm_'))}  # alemán: Kokoro no lo tiene (Piper)
+DEFAULT_ENGINE = 'piper' if has('piper') else 'kokoro'  # en ARM64 no hay Piper
 ELEVEN_MODELS = {'eleven_flash_v2_5': 'Flash v2.5', 'eleven_turbo_v2_5': 'Turbo v2.5',
                  'eleven_multilingual_v2': 'Multilingual v2', 'eleven_v3': 'v3'}
 
@@ -964,7 +982,7 @@ def eleven(sentence):
 
 def synthesize(sentence):
     """Una frase como .wav con la voz elegida; si no se puede (sin clave, sin internet, sin modelo), con la siguiente."""
-    engine = saved('voice_engine', 'piper')
+    engine = saved('voice_engine', DEFAULT_ENGINE)
     if engine == 'elevenlabs' and secret('ELEVENLABS_API_KEY') and not OPSEC['on'] and not paused('ElevenLabs'):
         try:
             return eleven(sentence)
@@ -979,7 +997,7 @@ def synthesize(sentence):
             return wav(samples, rate)
         except Exception:  # un error de Kokoro no deja a Node mudo: sigue Piper
             pass
-    if VOICE.exists():
+    if VOICE.exists() and has('piper'):
         buffer = io.BytesIO()
         with wave.open(buffer, 'wb') as out:
             model('voice').synthesize_wav(sentence, out)
@@ -1183,8 +1201,8 @@ def unload():
 
 def stop_others():
     """Cierra cualquier Node Assistant abierto (para el acceso directo "Cerrar Node Assistant")."""
-    script = ("Get-CimInstance Win32_Process -Filter \"Name like 'python%'\" | "
-              f"Where-Object {{ $_.CommandLine -match 'node_assistant' -and $_.ProcessId -notin {os.getpid()},{os.getppid()} }} | "
+    script = ("Get-CimInstance Win32_Process -Filter \"Name like 'python%' or Name = 'NodeAssistant.exe'\" | "
+              f"Where-Object {{ $_.CommandLine -match 'node_assistant|NodeAssistant\\.exe' -and $_.ProcessId -notin {os.getpid()},{os.getppid()} }} | "
               "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
     try:  # con tope: que cerrar nunca se cuelgue
         subprocess.run(['powershell', '-NoProfile', '-Command', script], capture_output=True, timeout=20,
@@ -1757,7 +1775,7 @@ def window():
         root.withdraw()  # espera escondido hasta el atajo
     # Carga Whisper y la voz en segundo plano para que la primera orden no espere.
     # (Whisper solo si ya está descargado: la descarga la ofrece /setup; la voz, si ya hay una)
-    threading.Thread(target=lambda: (chime_file(), whisper_ready() and model('ears'), VOICE.exists() and model('voice'),
+    threading.Thread(target=lambda: (chime_file(), whisper_ready() and model('ears'), VOICE.exists() and has('piper') and model('voice'),
                                      saved('voice_engine') == 'kokoro' and kokoro_ready() and model('kokoro')),
                      daemon=True).start()
     root.mainloop()

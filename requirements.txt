@@ -1,5 +1,5 @@
-faster-whisper>=1.2
-piper-tts>=1.8
+faster-whisper>=1.2; platform_machine != "ARM64"  # Whisper local: no existe para ARM64 (ahí entiende Groq)
+piper-tts>=1.8; platform_machine != "ARM64"  # Piper: no existe para ARM64 (ahí habla Kokoro)
 numpy>=2.0
 sounddevice>=0.5
 PyYAML>=6.0

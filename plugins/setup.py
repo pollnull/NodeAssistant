@@ -219,8 +219,7 @@ def kepano_template(folder):
 
 def restart():
     """Abre un Node nuevo (con los ajustes nuevos) y cierra este."""
-    pythonw = Path(sys.executable).with_name('pythonw.exe')
-    subprocess.Popen(f'cmd /c timeout /t 3 /nobreak >nul & start "" "{pythonw}" "{node.HERE / "node_assistant.py"}"',
+    subprocess.Popen(f'cmd /c timeout /t 3 /nobreak >nul & start "" {node.launch_command()}',
                      creationflags=NO_WINDOW)
     node.UI['quit']()
 
@@ -551,6 +550,10 @@ def import_gguf(body, status):
 
 def page_voice(body, choice):
     label(body, node.t('Voz'), FG, TITLE, pady=(0, 6))
+    if not node.has('piper'):  # ARM64: sin Piper; la voz local es Kokoro (o ElevenLabs en la nube)
+        label(body, node.t('En esta PC la voz es Kokoro (local y natural) o ElevenLabs (en la nube).'), pady=(0, 4))
+        voice_engine_block(body, choice)
+        return ears_block(body)
     label(body, node.t('Mi voz sale de tu PC con Piper, sin internet. Voces en {dato}: elige una (o importa la tuya); sin voz, te respondo solo con texto.', dato=node.LANGUAGES[choice["language"]][0]), pady=(0, 10))
     voices = node.HERE / 'voices'
     status = label(body, '', pady=(0, 4))
@@ -570,7 +573,15 @@ def page_voice(body, choice):
             get.pack(side='right')
     button(body, node.t('Importar una voz (.onnx)…'), lambda: import_voice(body, choice, status)).pack(anchor='w', pady=(8, 0))
     label(body, node.t('Más voces en huggingface.co/rhasspy/piper-voices (bajas el .onnx y su .onnx.json).'), font=TINY)
+    ears_block(body)
+
+
+def ears_block(body):
+    """Whisper: entenderte sin internet (no existe para ARM64: ahí te entiende Groq, en la nube)."""
     label(body, node.t('Entenderte sin internet'), FG, FONT, pady=(14, 2))
+    if not node.has('faster_whisper'):
+        return label(body, node.t('En esta PC te entiendo con Groq, en la nube: guarda su clave en IA en la nube.'))
+    status = label(body, '')
     groq = node.secret('GROQ_API_KEY')
     if node.whisper_ready():
         label(body, node.t('Whisper ya está descargado.'), GOOD)
@@ -686,9 +697,7 @@ def set_startup(on):
     """Que Windows abra Node al iniciar sesión (como un programa más en Inicio de la Configuración de Windows)."""
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
         if on:
-            pythonw = Path(sys.executable).with_name('pythonw.exe')
-            winreg.SetValueEx(key, 'NodeAssistant', 0, winreg.REG_SZ,
-                              f'"{pythonw}" "{node.HERE / "node_assistant.py"}"')
+            winreg.SetValueEx(key, 'NodeAssistant', 0, winreg.REG_SZ, node.launch_command())
         elif starts_with_windows():
             winreg.DeleteValue(key, 'NodeAssistant')
 
@@ -857,8 +866,10 @@ def try_voice():
 def voice_engine_block(body, choice):
     """Elegir con qué voz habla Node (se aplica al instante) y, abajo, la voz, el modelo y el estilo de ese motor."""
     label(body, node.t('Motor de voz'), FG, FONT, pady=(16, 2))
-    engine = tk.StringVar(body, node.saved('voice_engine', 'piper'))
+    engine = tk.StringVar(body, node.saved('voice_engine', node.DEFAULT_ENGINE))
     for value, text in ENGINES:
+        if value == 'piper' and not node.has('piper'):  # ARM64: Piper no existe para este procesador
+            continue
         tk.Radiobutton(body, text=node.t(text), variable=engine, value=value, bg=BG, fg=FG, selectcolor=FIELD,
                        font=SMALL, activebackground=BG, activeforeground=FG, anchor='w',
                        command=lambda: (node.save('voice_engine', engine.get()), warm_up(), WINDOW['show']())

@@ -25,3 +25,8 @@ muestra-*.wav
 *.log
 plugins_quitados/
 skills_quitadas/
+
+# Lo que arma installer/build.py
+dist/
+build/
+node.log
