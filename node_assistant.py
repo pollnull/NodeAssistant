@@ -450,42 +450,65 @@ def skills_for(text):
     return [skill for skill in load_skills() if skill['always'] or any(word in said for word in skill['words'])]
 
 
-def plan_cloud(text):
-    """La IA decide: una o varias acciones de TOOLS, o una respuesta. Devuelve [(acción, detalle), ...]."""
+QUICK = {'open', 'spotify', 'youtube', 'web_search', 'volume', 'media', 'folder', 'screenshot', 'lock', 'colors',
+         'time', 'remember'}  # sin datos que pensar: con una sola orden de estas, Node contesta sin otra vuelta (más rápido)
+ROUNDS = 6  # vueltas máximas: buscar, mirar el resultado, decidir el paso siguiente…
+
+
+def step_for(call):
+    """Lo que pidió la IA (una llamada a herramienta) como (acción, detalle) para act()."""
+    action, args = call['function']['name'], json.loads(call['function']['arguments'] or '{}')
+    if action == 'open':
+        app = find_app(args.get('name', ''))
+        return ('open', app) if app else ('say', t('No encontré la app {app}.', app=args.get('name', '')))
+    if action in ('spotify', 'youtube'):
+        query = args.get('query', '').strip()
+        return action, (query, bool(query and args.get('play')))
+    if action in ARGUMENT:
+        return action, args.get(ARGUMENT[action])
+    if action in ('screenshot', 'lock', 'time'):
+        return action, None
+    return action, args
+
+
+def agent(text, mood=lambda _: None, where='pc'):
+    """La IA decide y Node hace: cada herramienta corre en el momento y la IA ve su resultado, así puede encadenar
+    pasos ("busca el informe y ábrelo") y contestar con lo que pasó de verdad. Devuelve (respuesta, pasos)."""
     skills = skills_for(text)
     guide = ''.join(f'\n\nSkill "{skill["name"]}" (síguela si corresponde a lo que pidió):\n{skill["body"]}'
                     for skill in skills)
-    messages = [{'role': 'system', 'content': system(' Si te piden hacer algo en la computadora, usa las '
-                                                     'herramientas, una por cada cosa pedida; si no, responde tú.'
-                                                     + guide)},
+    messages = [{'role': 'system', 'content': system(
+        ' Si te piden hacer algo en la computadora, usa las herramientas: cada una te devuelve qué pasó, y con eso '
+        'decides el paso siguiente o le respondes. Cuando termines, responde en 1 a 3 frases con lo que hiciste o '
+        'encontraste, sin repetir lo que ya se ve en pantalla.' + guide)},
                 *HISTORY, {'role': 'user', 'content': text}]
-    calls = []
     # Las herramientas que nombran las skills también viajan (para el ahorro de cupo cuentan como si lo hubieras dicho).
     tools = pick_tools(text + ' ' + ' '.join(skill['body'] for skill in skills))
-    # El modelo pide de a una acción: "X y después Y" son dos vueltas. Con una sola orden, una sola consulta (más rápido).
-    for _ in range(4 if MANY.search(text.lower()) or skills else 1):
-        message = cloud(messages, tools=tools)
-        if not message.get('tool_calls'):
-            break
-        calls += message['tool_calls']
-        messages += [{'role': 'assistant', 'content': message.get('content') or '', 'tool_calls': message['tool_calls']}]
-        messages += [{'role': 'tool', 'tool_call_id': call['id'], 'content': 'hecho'} for call in message['tool_calls']]
-    steps = []
-    for call in calls:
-        action, args = call['function']['name'], json.loads(call['function']['arguments'] or '{}')
-        if action == 'open':
-            app = find_app(args.get('name', ''))
-            steps.append(('open', app) if app else ('say', t('No encontré la app {app}.', app=args.get('name', ''))))
-        elif action in ('spotify', 'youtube'):
-            query = args.get('query', '').strip()
-            steps.append((action, (query, bool(query and args.get('play')))))
-        elif action in ARGUMENT:
-            steps.append((action, args.get(ARGUMENT[action])))
-        elif action in ('screenshot', 'lock', 'time'):
-            steps.append((action, None))
-        elif action in PLUGINS:
-            steps.append((action, args))
-    return steps or [('say', tidy(message.get('content')))]
+    steps, results = [], []
+    for round_ in range(ROUNDS):
+        try:
+            message = cloud(messages, tools=tools)
+        except ConnectionError:
+            if not steps:
+                raise  # sin nada hecho: handle() sigue con las reglas y Laya
+            return ' '.join(results), steps  # se cortó la nube a mitad de camino: lo que ya se hizo
+        calls = message.get('tool_calls') or []
+        if not calls:
+            return tidy(message.get('content')) or ' '.join(results), steps or [('say', tidy(message.get('content')))]
+        messages.append({'role': 'assistant', 'content': message.get('content') or '', 'tool_calls': calls})
+        for call in calls:
+            action, detail = step_for(call)
+            try:
+                result = act(action, detail, mood, where) or t('Listo.')
+            except Exception as error:  # que la IA se entere del error y decida (avisar, probar otra cosa)
+                result = t('Error: {error}', error=error)
+            steps.append((action, detail))
+            results.append(result)
+            messages.append({'role': 'tool', 'tool_call_id': call['id'], 'content': str(result)[:3000]})
+        quick = all(call['function']['name'] in QUICK for call in calls)
+        if round_ == 0 and quick and not skills and not MANY.search(text.lower()):
+            return ' '.join(results), steps  # una orden simple: la confirmación de la herramienta alcanza
+    return ' '.join(results), steps
 
 
 def at(moment):
@@ -645,7 +668,13 @@ def whisper_ready():
 def model(name):
     """Carga Whisper y la voz una sola vez (la primera carga tarda unos segundos)."""
     if name not in _models:
-        _models[name] = WhisperModel(HEARING, device='cpu', compute_type='int8') if name == 'ears' else PiperVoice.load(VOICE)
+        if name == 'ears':
+            _models[name] = WhisperModel(HEARING, device='cpu', compute_type='int8')
+        elif name == 'kokoro':  # solo si la elegiste: no hace falta tenerla instalada
+            from kokoro_onnx import Kokoro
+            _models[name] = Kokoro(str(KOKORO_DIR / 'kokoro-v1.0.int8.onnx'), str(KOKORO_DIR / 'voices-v1.0.bin'))
+        else:
+            _models[name] = PiperVoice.load(VOICE)
     return _models[name]
 
 
@@ -838,10 +867,86 @@ def listen():
     return transcribe(audio)
 
 
+# La voz: Piper (local, liviana), Kokoro (local, más natural) o ElevenLabs (en la nube, la más natural; con clave).
+# Se elige en /settings → Voz y micrófono, y se aplica al instante. Si la elegida falla, habla con la que haya.
+KOKORO_DIR = HERE / 'voices' / 'kokoro'
+KOKORO_FILES = {'kokoro-v1.0.int8.onnx': 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/'
+                                         'kokoro-v1.0.int8.onnx',
+                'voices-v1.0.bin': 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/'
+                                   'voices-v1.0.bin'}
+KOKORO_LANGS = {'es': ('es', ('ef_', 'em_')), 'en': ('en-us', ('af_', 'am_', 'bf_', 'bm_')), 'fr': ('fr-fr', ('ff_',)),
+                'it': ('it', ('if_', 'im_')), 'pt': ('pt-br', ('pf_', 'pm_'))}  # alemán: Kokoro no lo tiene (Piper)
+ELEVEN_MODELS = {'eleven_flash_v2_5': 'Flash v2.5', 'eleven_turbo_v2_5': 'Turbo v2.5',
+                 'eleven_multilingual_v2': 'Multilingual v2', 'eleven_v3': 'v3'}
+
+
+def wav(samples, rate):
+    """Muestras (numpy float -1..1, o bytes PCM de 16 bits) como un .wav en memoria, para winsound."""
+    data = samples if isinstance(samples, bytes) else (np.clip(samples, -1, 1) * 32767).astype('<i2').tobytes()
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes(data)
+    return buffer.getvalue()
+
+
+def kokoro_ready():
+    return LANGUAGE in KOKORO_LANGS and all((KOKORO_DIR / name).exists() for name in KOKORO_FILES)
+
+
+def kokoro_voices():
+    """Las voces de Kokoro para tu idioma."""
+    prefixes = KOKORO_LANGS.get(LANGUAGE, ('', ()))[1]
+    return sorted(v for v in model('kokoro').get_voices() if v.startswith(prefixes)) if kokoro_ready() else []
+
+
+def eleven(sentence):
+    """Una frase con ElevenLabs (PCM a 22 kHz, sin decodificar MP3)."""
+    model_id = saved('eleven_model', 'eleven_flash_v2_5')
+    body = {'text': sentence, 'model_id': model_id, 'voice_settings': {
+        'stability': saved('eleven_stability', 0.5), 'similarity_boost': saved('eleven_similarity', 0.75),
+        'style': saved('eleven_style', 0.0), 'speed': saved('eleven_speed', 1.0), 'use_speaker_boost': True}}
+    if model_id.endswith('v2_5'):  # los rápidos aceptan el idioma (pronuncian mejor)
+        body['language_code'] = LANGUAGE
+    voice = saved('eleven_voice', 'JBFqnCBsd6RMkjVDRZzb')  # George (de las de fábrica) hasta que elijas otra
+    request = urllib.request.Request(
+        f'https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=pcm_22050', json.dumps(body).encode(),
+        {'xi-api-key': secret('ELEVENLABS_API_KEY'), 'Content-Type': 'application/json', 'User-Agent': 'NodeAssistant'})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return wav(response.read(), 22050)
+
+
+def synthesize(sentence):
+    """Una frase como .wav con la voz elegida; si no se puede (sin clave, sin internet, sin modelo), con la siguiente."""
+    engine = saved('voice_engine', 'piper')
+    if engine == 'elevenlabs' and secret('ELEVENLABS_API_KEY') and not OPSEC['on'] and not paused('ElevenLabs'):
+        try:
+            return eleven(sentence)
+        except (OSError, ValueError):  # sin cupo, sin internet o clave mala: un rato con la voz local
+            pause('ElevenLabs', 300)
+    if engine in ('kokoro', 'elevenlabs') and kokoro_ready():
+        try:
+            voices = kokoro_voices()
+            voice = saved('kokoro_voice') if saved('kokoro_voice') in voices else voices[0]
+            samples, rate = model('kokoro').create(sentence, voice=voice, speed=saved('kokoro_speed', 1.0),
+                                                   lang=KOKORO_LANGS[LANGUAGE][0])
+            return wav(samples, rate)
+        except Exception:  # un error de Kokoro no deja a Node mudo: sigue Piper
+            pass
+    if VOICE.exists():
+        buffer = io.BytesIO()
+        with wave.open(buffer, 'wb') as out:
+            model('voice').synthesize_wav(sentence, out)
+        return buffer.getvalue()
+    return None
+
+
 def speak(text):
-    """Lee el texto en voz alta con Piper (sin internet), frase por frase: empieza a hablar con la primera
-    mientras prepara las siguientes, en vez de esperar a tener todo listo."""
-    if saved('voz_off') or not VOICE.exists():  # voz apagada, o todavía sin voz descargada (/setup): solo texto
+    """Lee el texto en voz alta frase por frase: empieza a hablar con la primera mientras prepara las siguientes, en
+    vez de esperar a tener todo listo."""
+    if saved('voz_off'):  # voz apagada: solo texto
         return
     text = re.sub(r'[*#_`]', '', text)  # sin los símbolos de formato que llama3.2 a veces agrega
     sentences = [part for part in re.split(r'(?<=[.!?…;:])\s+', text) if part.strip()] or [text]
@@ -850,10 +955,9 @@ def speak(text):
     def make():
         try:
             for sentence in sentences:
-                buffer = io.BytesIO()
-                with wave.open(buffer, 'wb') as out:
-                    model('voice').synthesize_wav(sentence, out)
-                ready.put(buffer.getvalue())
+                if (sound := synthesize(sentence)) is None:
+                    break  # sin ninguna voz todavía (/setup): solo texto
+                ready.put(sound)
         finally:
             ready.put(None)  # fin (también si algo falló: que no se quede esperando)
 
@@ -995,11 +1099,11 @@ def handle(text, mood=lambda _: None, where='pc'):
             log(text, reply)
             return reply, [('say', reply)]
     try:
-        steps = plan_cloud(text)
+        reply, steps = agent(text, mood, where)
     except ConnectionError:  # ninguna nube respondió: decide como antes, con las reglas y Laya
         action, detail = plan(text)
         steps = [(action, detail if action != 'chat' else text)]
-    reply = ' '.join(act(action, detail, mood, where) for action, detail in steps)
+        reply = ' '.join(act(action, detail, mood, where) for action, detail in steps)
     log(text, reply)
     return reply, steps
 
@@ -1621,7 +1725,8 @@ def window():
         root.withdraw()  # espera escondido hasta el atajo
     # Carga Whisper y la voz en segundo plano para que la primera orden no espere.
     # (Whisper solo si ya está descargado: la descarga la ofrece /setup; la voz, si ya hay una)
-    threading.Thread(target=lambda: (chime_file(), whisper_ready() and model('ears'), VOICE.exists() and model('voice')),
+    threading.Thread(target=lambda: (chime_file(), whisper_ready() and model('ears'), VOICE.exists() and model('voice'),
+                                     saved('voice_engine') == 'kokoro' and kokoro_ready() and model('kokoro')),
                      daemon=True).start()
     root.mainloop()
 

@@ -25,7 +25,10 @@
 
 - **Voz de ida y vuelta.** Una cápsula de vidrio baja desde arriba de la pantalla. El orbe queda gris mientras el
   micrófono arranca y, cuando ya te escucha, destella y suena un sable láser: ahí hablas. Te entiende con Whisper
-  (o Groq, más rápido) y te contesta con una voz de Piper, sin internet.
+  (o Groq, más rápido) y te contesta en voz alta con la voz que elijas: **Piper** (local y liviana), **Kokoro**
+  (local y mucho más natural) o **ElevenLabs** (en la nube, la más natural; eliges voz, modelo y estilo).
+- **Piensa con lo que hace:** cada herramienta le devuelve a la IA su resultado real, así encadena pasos ("busca el
+  informe y ábrelo", "¿qué hora es y cuánto disco me queda?") y te contesta con lo que pasó de verdad.
 - **Hace cosas en la PC:** abre apps, carpetas y juegos de Steam; busca en Google, YouTube y Spotify; maneja el
   volumen y la música; captura la pantalla; bloquea la PC; mira la pantalla y te explica lo que ves; encuentra un
   botón y le hace clic; corre comandos de PowerShell (preguntando antes de cambiar algo).
@@ -95,7 +98,8 @@ Al terminar, Node se reinicia con todo aplicado. Aprieta **Ctrl + Alt + N**, esp
 También puedes escribir en la cápsula y apretar Enter. Para cerrarlo: di o escribe "salir".
 
 Después, **`/settings`** abre los ajustes, por secciones: General (nombre, idioma, inicio con Windows, colores), IA en
-la nube, Modelos locales, Voz y micrófono (voz, largo máximo para leer en voz alta, espera del micrófono), Memoria
+la nube, Modelos locales, Voz y micrófono (Piper, Kokoro o ElevenLabs con su voz, modelo y estilo; largo máximo
+para leer en voz alta, espera del micrófono), Memoria
 (bóveda, resumen del día y su hora), Herramientas (prender o apagar cada una), Plugins, Skills, Servicios (Telegram, Discord, OBS, Cloudflare, Google) y Avanzado
 (personalidad, creatividad, Whisper, modo privado).
 
@@ -193,8 +197,9 @@ Cuando el usuario quiera ponerse a trabajar, haz esto, una herramienta por paso:
 3. Muestra las tareas pendientes.
 ```
 
-Una skill se activa cuando dices alguna de sus `palabras` (o siempre, con `siempre: true`). Node trae tres de
-ejemplo: *modo trabajo*, *profe de inglés* y *buenas noches*. Se manejan en `/settings` → **Skills**: prenderlas o
+Una skill se activa cuando dices alguna de sus `palabras` (o siempre, con `siempre: true`). Node trae cuatro de
+ejemplo: *Jarvis* (siempre prendida: estilo de mayordomo formal, preciso y casi siempre impersonal, con humor
+seco), *modo trabajo*, *profe de inglés* y *buenas noches*. Se manejan en `/settings` → **Skills**: prenderlas o
 apagarlas, editarlas en el Bloc de notas, crear una nueva o instalarla desde un enlace o un archivo (entra apagada,
 para que la leas antes). Como son texto, se comparten fácil; lo que cambia algo en tu PC igual te pide confirmación,
 y cualquier herramienta se puede apagar en `/settings` → **Herramientas**.

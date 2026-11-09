@@ -145,7 +145,7 @@ def setup(node_):
     node.add(node.tool('pc_status', 'Estado de la computadora. what: summary (procesador, memoria, batería, tiempo '
                        'prendida), battery, memory (y qué la usa), disk (espacio libre) o processes (qué consume).',
                        what={'type': 'string', 'enum': ['summary', 'battery', 'memory', 'disk', 'processes']}), status,
-             r'bateria|carga|memoria|\bram\b|procesador|cpu|disco|espacio|lent|estado|consum|prendida|que esta usando')
+             r'bateria|carga|memoria|\bram\b|procesador|cpu|disco|espacio|lent|estado|consum|prendida|que esta usando|como esta (?:la )?(?:pc|compu)|battery|storage|status')
     node.add(node.tool('pc_power', 'Apaga (shutdown) o reinicia (restart) la PC dentro de minutes minutos (mínimo 1), '
                        'o cancela (cancel) un apagado programado. Solo si el usuario lo pide claramente.',
                        action={'type': 'string', 'enum': ['shutdown', 'restart', 'cancel']},

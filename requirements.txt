@@ -4,3 +4,4 @@ numpy>=2.0
 sounddevice>=0.5
 PyYAML>=6.0
 obsws-python>=1.8
+kokoro-onnx>=0.6

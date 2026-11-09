@@ -26,7 +26,11 @@
 
 - **Two-way voice.** A glass capsule slides down from the top of the screen. The orb stays gray while the
   microphone starts up and, once it's actually listening, it flashes and a lightsaber sound plays: that's your cue
-  to speak. It understands you with Whisper (or Groq, which is faster) and answers with a Piper voice, offline.
+  to speak. It understands you with Whisper (or Groq, which is faster) and answers out loud with the voice you
+  choose: **Piper** (local and light), **Kokoro** (local and much more natural) or **ElevenLabs** (cloud, the most
+  natural; you pick the voice, model and style).
+- **Thinks with what it does:** every tool returns its real result to the AI, so it can chain steps ("find the
+  report and open it", "what time is it and how much disk space is left?") and answer with what actually happened.
 - **Does things on your PC:** opens apps, folders and Steam games; searches Google, YouTube and Spotify; controls
   volume and music; takes screenshots; locks the PC; looks at your screen and explains what it sees; finds a button
   and clicks it; runs PowerShell commands (asking before it changes anything).
@@ -98,7 +102,8 @@ When you finish, Node restarts with everything applied. Press **Ctrl + Alt + N**
 speak. You can also type in the capsule and press Enter. To close it, say or type "exit".
 
 Afterwards, **`/settings`** opens the settings, by section: General (name, language, start with Windows, colors),
-Cloud AI, Local models, Voice and microphone (voice, maximum length to read aloud, microphone warm-up), Memory (vault,
+Cloud AI, Local models, Voice and microphone (Piper, Kokoro or ElevenLabs with its voice, model and style;
+maximum length to read aloud, microphone warm-up), Memory (vault,
 daily summary and its time), Tools (turn each one on or off), Plugins, Skills, Services (Telegram, Discord, OBS, Cloudflare, Google) and Advanced
 (personality, creativity, Whisper, private mode).
 
@@ -199,8 +204,9 @@ When the user wants to start working, do this, one tool per step:
 3. Show the pending tasks.
 ```
 
-A skill kicks in when you say one of its `words` (or always, with `always: true`). Node ships with three examples:
-*work mode*, *English teacher* and *good night*. Manage them in `/settings` → **Skills**: turn them on or off, edit
+A skill kicks in when you say one of its `words` (or always, with `always: true`). Node ships with four examples:
+*Jarvis* (always on: a formal, precise and mostly impersonal butler style, with dry humor), *work mode*, *English
+teacher* and *good night*. Manage them in `/settings` → **Skills**: turn them on or off, edit
 them in Notepad, create a new one, or install one from a link or a file (it's added turned off, so you can read it
 first). Since they're just text, they're easy to share; anything that changes something on your PC still asks for
 confirmation, and you can turn off any tool in `/settings` → **Tools**.

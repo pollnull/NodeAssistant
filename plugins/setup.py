@@ -778,6 +778,123 @@ def section_voice(body, choice):
            'panel, con scroll).', 50, 5000, 50)
     number(body, choice, 'mic_warmup', 'Espera del micrófono al abrirse', 'segundos: lo que tarda en captar de verdad '
            '(el orbe queda gris ese rato). Súbelo si se come el principio de lo que dices.', 0.0, 3.0, 0.1)
+    voice_engine_block(body, choice)
+
+
+ENGINES = N_((('piper', 'Piper: local y liviana'), ('kokoro', 'Kokoro: local y más natural'),
+               ('elevenlabs', 'ElevenLabs: en la nube, la más natural (con clave)')))
+ELEVEN_STYLE = N_((('eleven_stability', 'Estabilidad', 0.0, 1.0, 0.5, 'más baja: más expresiva; más alta: más pareja'),
+                   ('eleven_similarity', 'Parecido a la voz original', 0.0, 1.0, 0.75, ''),
+                   ('eleven_style', 'Estilo (exagera la forma de hablar de la voz)', 0.0, 1.0, 0.0, ''),
+                   ('eleven_speed', 'Velocidad', 0.7, 1.2, 1.0, '')))
+
+
+def slider(body, key, text, low, high, default, about=''):
+    """Un control deslizable que se guarda al instante (la voz lo usa en la próxima frase)."""
+    label(body, node.t(text), FG, SMALL, pady=(6, 0))
+    scale = tk.Scale(body, from_=low, to=high, resolution=0.05, orient='horizontal', bg=BG, fg=FG, troughcolor=FIELD,
+                     highlightthickness=0, bd=0, activebackground=node.GLOW[0], showvalue=True, font=TINY,
+                     command=lambda value: node.save(key, float(value)))
+    scale.set(node.saved(key, default))
+    scale.pack(fill='x')
+    if about:
+        label(body, node.t(about), font=TINY)
+
+
+def try_voice():
+    threading.Thread(target=node.speak, args=(node.t('Así sueno. Todos los sistemas en orden.'),), daemon=True).start()
+
+
+def voice_engine_block(body, choice):
+    """Elegir con qué voz habla Node (se aplica al instante) y, abajo, la voz, el modelo y el estilo de ese motor."""
+    label(body, node.t('Motor de voz'), FG, FONT, pady=(16, 2))
+    engine = tk.StringVar(body, node.saved('voice_engine', 'piper'))
+    for value, text in ENGINES:
+        tk.Radiobutton(body, text=node.t(text), variable=engine, value=value, bg=BG, fg=FG, selectcolor=FIELD,
+                       font=SMALL, activebackground=BG, activeforeground=FG, anchor='w',
+                       command=lambda: (node.save('voice_engine', engine.get()), WINDOW['show']())).pack(fill='x')
+    status = label(body, '')
+    chosen = engine.get()
+    if chosen == 'kokoro':
+        if node.LANGUAGE not in node.KOKORO_LANGS:
+            label(body, node.t('Kokoro no tiene voces en este idioma: se usa Piper.'), BAD)
+        elif not node.kokoro_ready():
+            get = button(body, node.t('Descargar Kokoro (unos 120 MB)'), None, accent=True)
+
+            def fetch():
+                get.config(state='disabled', text=node.t('Bajando…'))
+                node.KOKORO_DIR.mkdir(parents=True, exist_ok=True)
+
+                def work():
+                    for name, url in node.KOKORO_FILES.items():
+                        download(url, node.KOKORO_DIR / name,
+                                 lambda text, n=name: body.after(0, lambda: status.config(text=f'{n}: {text}', fg=SOFT)))
+                in_background(body, work, lambda _r, error: status.config(
+                    text=node.t('No pude bajar Kokoro: {error}.', error=problem(error)), fg=BAD) if error else
+                    WINDOW['show']())
+            get.config(command=fetch)
+            get.pack(anchor='w', pady=(4, 0))
+        else:
+            voices = node.kokoro_voices()
+            label(body, node.t('Voz'), FG, SMALL, pady=(6, 2))
+            pick = ttk.Combobox(body, values=voices, state='readonly', font=FONT)
+            pick.set(node.saved('kokoro_voice') if node.saved('kokoro_voice') in voices else voices[0])
+            pick.bind('<<ComboboxSelected>>', lambda _e: node.save('kokoro_voice', pick.get()))
+            pick.pack(fill='x', ipady=3)
+            label(body, node.t('La letra del medio dice si es femenina (f) o masculina (m): ef_dora, em_alex…'), font=TINY)
+            slider(body, 'kokoro_speed', N_('Velocidad'), 0.7, 1.3, 1.0)
+    elif chosen == 'elevenlabs':
+        label(body, node.t('Lo que dice Node viaja a ElevenLabs. El plan gratis trae unos 10.000 caracteres por mes; si '
+                           'se acaba o no hay internet (o con /opsec), habla con la voz local.'), font=TINY)
+        label(body, node.t('Clave API'), FG, SMALL, pady=(6, 2))
+        line = row(body)
+        key = entry(line, show='•')
+        key.pack(side='left', fill='x', expand=True, ipady=4)
+        has = node.secret('ELEVENLABS_API_KEY')
+        button(line, node.t('Guardar'), lambda: key.get().strip() and (
+            save_key('ELEVENLABS_API_KEY', key.get().strip()), WINDOW['show']())).pack(side='left', padx=(6, 0))
+        label(body, node.t('Ya hay una clave guardada.') if has else
+              node.t('Consigue una en elevenlabs.io → Developers → API Keys.'), GOOD if has else SOFT, TINY)
+        if has:
+            label(body, node.t('Voz'), FG, SMALL, pady=(6, 2))
+            line = row(body)
+            names = {}
+            pick = ttk.Combobox(line, state='readonly', font=FONT)
+            pick.set(node.saved('eleven_voice_name', 'George'))
+            pick.pack(side='left', fill='x', expand=True, ipady=3)
+            pick.bind('<<ComboboxSelected>>', lambda _e: (node.save('eleven_voice', names[pick.get()]),
+                                                          node.save('eleven_voice_name', pick.get())))
+
+            def find_voices():
+                status.config(text=node.t('Buscando tus voces…'), fg=SOFT)
+
+                def done(result, error):
+                    if error:
+                        return status.config(text=node.t('No pude: {error}.', error=problem(error)), fg=BAD)
+                    names.clear()
+                    names.update({v['name']: v['voice_id'] for v in result.get('voices', [])})
+                    pick.config(values=sorted(names))
+                    status.config(text=node.t('{count} voces: elige una.', count=len(names)), fg=SOFT)
+                in_background(body, lambda: get_eleven('/v1/voices'), done)
+            button(line, node.t('Buscar mis voces'), find_voices).pack(side='left', padx=(6, 0))
+            label(body, node.t('Modelo'), FG, SMALL, pady=(6, 2))
+            models = {name: code for code, name in node.ELEVEN_MODELS.items()}
+            model = ttk.Combobox(body, values=list(models), state='readonly', font=FONT)
+            model.set(node.ELEVEN_MODELS.get(node.saved('eleven_model', 'eleven_flash_v2_5'), 'Flash v2.5'))
+            model.bind('<<ComboboxSelected>>', lambda _e: node.save('eleven_model', models[model.get()]))
+            model.pack(fill='x', ipady=3)
+            label(body, node.t('Flash y Turbo responden más rápido; Multilingual v2 suena más natural; v3 es el más '
+                               'expresivo.'), font=TINY)
+            for key_, text, low, high, default, about in ELEVEN_STYLE:
+                slider(body, key_, text, low, high, default, about)
+    button(body, node.t('Probar voz'), try_voice).pack(anchor='w', pady=(10, 0))
+
+
+def get_eleven(path):
+    request = urllib.request.Request('https://api.elevenlabs.io' + path, headers={
+        'xi-api-key': node.secret('ELEVENLABS_API_KEY'), 'User-Agent': 'NodeAssistant'})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.load(response)
 
 
 def section_memory(body, choice):
