@@ -681,6 +681,23 @@ def model(name):
 NOISE = {'level': 0.0}  # el ruido del ambiente medido en la grabación anterior (la primera vez, umbral mínimo)
 
 
+def microphones():
+    """Los micrófonos de la PC, por nombre (los de MME: uno por aparato, con el nombre que muestra Windows)."""
+    mme = next((i for i, api in enumerate(sd.query_hostapis()) if api['name'] == 'MME'), 0)
+    return [d['name'] for d in sd.query_devices() if d['max_input_channels'] > 0 and d['hostapi'] == mme
+            and 'Mapper' not in d['name']]
+
+
+def mic_device():
+    """El micrófono elegido en /settings (por su número de ahora: cambia al conectar cosas), o None = el de Windows."""
+    name = saved('mic_device')
+    if name:
+        for index, device in enumerate(sd.query_devices()):
+            if device['max_input_channels'] > 0 and device['name'] == name:
+                return index
+    return None  # el predeterminado de Windows (o el elegido no está conectado ahora)
+
+
 class Mic:
     """El micrófono siempre abierto (MIC['always']). Guarda en memoria solo el último medio segundo, que se pisa
     todo el tiempo: nada se graba en disco ni sale de la PC hasta que aprietas el atajo. Gasta ~0,1 % de procesador."""
@@ -688,6 +705,7 @@ class Mic:
     def __init__(self):
         self.recent, self.queue, self.lock = collections.deque(maxlen=5), None, threading.Lock()
         self.stream = sd.InputStream(samplerate=RATE, channels=1, dtype='float32', blocksize=RATE // 10,
+                                     device=mic_device(),
                                      callback=self.heard)
         self.stream.start()
 
@@ -774,7 +792,7 @@ def microphone():
         finally:
             mic.stop()
     else:
-        with sd.InputStream(samplerate=RATE, channels=1, dtype='float32') as stream:
+        with sd.InputStream(samplerate=RATE, channels=1, dtype='float32', device=mic_device()) as stream:
             yield [], lambda: stream.read(RATE // 10)[0][:, 0]
 
 
@@ -1142,8 +1160,11 @@ def stop_others():
     script = ("Get-CimInstance Win32_Process -Filter \"Name like 'python%'\" | "
               f"Where-Object {{ $_.CommandLine -match 'node_assistant' -and $_.ProcessId -notin {os.getpid()},{os.getppid()} }} | "
               "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
-    subprocess.run(['powershell', '-NoProfile', '-Command', script], capture_output=True,
-                   creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    try:  # con tope: que cerrar nunca se cuelgue
+        subprocess.run(['powershell', '-NoProfile', '-Command', script], capture_output=True, timeout=20,
+                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    except (subprocess.TimeoutExpired, OSError):
+        pass
 
 
 def listen_hotkey(on_press):
@@ -1718,7 +1739,12 @@ def window():
     set_mood('idle')
     animate()
     blink()
-    if not listen_hotkey(lambda: root.after(0, summon)):
+    hotkey = listen_hotkey(lambda: root.after(0, summon))
+    if not hotkey:  # otro Node se quedó abierto (o colgado) con el atajo: se cierra y este toma su lugar
+        stop_others()
+        time.sleep(1)
+        hotkey = listen_hotkey(lambda: root.after(0, summon))
+    if not hotkey:
         appear()
         show(t('Ctrl+Alt+N ya está en uso: ¿Node Assistant ya está abierto? Este no va a responder al atajo.'))
     else:
@@ -1819,10 +1845,14 @@ load_plugins()
 
 if __name__ == '__main__':
     if sys.argv[1:2] == ['--stop']:  # apaga todo: el asistente y los modelos en la placa de video
+        stop_others()  # primero: sin incluirse (el lanzador del entorno .venv es su proceso padre)
         unload()
-        stop_others()  # sin incluirse: el lanzador del entorno .venv es su proceso padre
     elif sys.argv[1:2] == ['--dry']:
         for phrase in sys.argv[2:]:
             print(f'{phrase!r} -> {plan(phrase)}')
     else:
         window()
+    # Termina de verdad: sin esto, un hilo del micrófono o de la voz puede dejar el proceso vivo y sin ventana
+    # (y con el atajo tomado: el próximo Node no respondería).
+    sys.stdout and sys.stdout.flush()
+    os._exit(0)

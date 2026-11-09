@@ -770,9 +770,52 @@ def section_general(body, choice):
     colors_picker(body)
 
 
+def mic_picker(body):
+    """Qué micrófono usa Node (si no, el predeterminado de Windows, que cambia solo al conectar auriculares o un control
+    de juegos) y una prueba de 3 segundos para ver si llega tu voz."""
+    label(body, node.t('Micrófono'), FG, SMALL, pady=(8, 2))
+    default = node.t('El predeterminado de Windows')
+    names = node.microphones()
+    pick = ttk.Combobox(body, values=[default] + names, state='readonly', font=FONT)
+    pick.set(node.saved('mic_device') if node.saved('mic_device') in names else default)
+
+    def chose(_event=None):
+        node.save('mic_device', '' if pick.get() == default else pick.get())
+        if node.MIC['open']:  # el siempre listo: se vuelve a abrir con el elegido
+            node.MIC['open'].stream.close()
+            node.MIC['open'] = None
+            node.mic_ready()
+    pick.bind('<<ComboboxSelected>>', chose)
+    pick.pack(fill='x', ipady=3)
+    label(body, node.t('Si conectas auriculares o un control de juegos, Windows puede cambiar el suyo solo: elige uno fijo '
+                       'para que no pase.'), font=TINY)
+    line = row(body)
+    result = tk.Label(line, text='', bg=BG, fg=SOFT, font=SMALL, anchor='w')
+
+    def test():
+        result.config(text=node.t('Habla ahora… (3 segundos)'), fg=SOFT)
+
+        def work():
+            import numpy as np
+            import sounddevice as sd
+            with sd.InputStream(samplerate=16000, channels=1, dtype='float32', device=node.mic_device()) as stream:
+                return max(float(np.sqrt(np.mean(stream.read(1600)[0][:, 0] ** 2))) for _ in range(30))
+
+        def done(level, error):
+            if error:
+                return result.config(text=node.t('No pude abrir el micrófono: {error}.', error=problem(error)), fg=BAD)
+            result.config(text=node.t('Te escuché bien.') if level > 0.01 else node.t('Llega muy bajito.') if level > 0.002
+                          else node.t('No llega sonido: elige otro micrófono o revisa que no esté silenciado.'),
+                          fg=GOOD if level > 0.01 else BAD)
+        in_background(body, work, done)
+    button(line, node.t('Probar micrófono'), test).pack(side='left')
+    result.pack(side='left', padx=8)
+
+
 def section_voice(body, choice):
     page_voice(body, choice)
     label(body, node.t('Micrófono y voz'), FG, FONT, pady=(16, 0))
+    mic_picker(body)
     switches(body, ('voice', 'mic', 'always'))
     number(body, choice, 'quiet', 'No leer en voz alta respuestas de más de', 'caracteres (las largas se leen en el '
            'panel, con scroll).', 50, 5000, 50)
