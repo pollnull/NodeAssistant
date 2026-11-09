@@ -3,7 +3,7 @@ r"""Node Assistant: apreta Ctrl+Alt+N, suena un bip, di la orden y haz una pausa
 Abre apps y carpetas, busca en Google, maneja el volumen y la música, captura la pantalla, bloquea la PC y dice la hora;
 lo que no sea una orden lo responde la IA en la nube (Groq, Gemini, OpenRouter o Cloudflare) o, sin internet, llama3.2.
 Una cápsula azul baja desde arriba; también puedes escribir en ella y apretar Enter. La respuesta sale debajo.
-Escape o un clic afuera la esconden (sigue esperando el atajo) y se esconde sola a los 10 s.
+Escape o un clic afuera la esconden (sigue esperando el atajo); sola no se esconde.
 Para apagarlo del todo y liberar memoria: di o escribe "salir", o usa "Cerrar Node Assistant" del menú Inicio.
 Usa el entorno de la carpeta:  .venv\Scripts\pythonw.exe node_assistant.py
 Probar sin abrir nada:         .venv\Scripts\python.exe node_assistant.py --dry "pon algo de música"
@@ -372,7 +372,7 @@ TOOLS = [
     tool('lock', 'Bloquea la computadora.'),
     tool('time', 'Dice la hora y la fecha de hoy.'),
     tool('colors', 'Cambia los colores de la cápsula de Node. request es lo que pidió el usuario, tal cual: '
-         'nombres de colores ("rojo, azul y verde"), un combo (siri, fuego, oceano, bosque, atardecer, neon, aurora, '
+         'nombres de colores ("rojo, azul y verde"), un combo (node, siri, fuego, oceano, bosque, atardecer, neon, aurora, '
          'hielo) o una idea ("colores de atardecer").', request={'type': 'string'}),
     tool('remember', 'Guarda para siempre un dato que el usuario te pide recordar, o algo suyo que conviene '
          'recordar (gustos, nombres, planes). Escríbelo como una frase corta en tercera persona.',
@@ -1214,6 +1214,7 @@ def listen_hotkey(on_press):
 # Estilo Siri / Bixby: vidrio oscuro, un borde de luz de colores que gira y un orbe que respira con tu voz.
 # Combos de colores para /feeling: suma los tuyos acá.
 COMBOS = {
+    'node': ['#2d6bff', '#5cc8ff', '#00e5ff'],  # los de Node: azules (los que trae de fábrica)
     'siri': ['#ff3d81', '#ff8a3d', '#b84dff', '#3d7bff', '#2de2ff'],
     'fuego': ['#ff2a00', '#ff7a00', '#ffc400', '#ff0055'],
     'oceano': ['#00e5ff', '#0077ff', '#00ffb3', '#3d4dff'],
@@ -1231,7 +1232,7 @@ NAMES = {  # los nombres de colores que entiende /feeling (sin tildes)
     'menta': '#5cffb8', 'coral': '#ff6f61', 'indigo': '#4b3dff', 'esmeralda': '#00c878', 'bordo': '#b0123a',
 }
 COLORS_FILE = HERE / 'colores.json'  # tus colores elegidos, para que sigan después de reiniciar
-GLOW = json.loads(COLORS_FILE.read_text(encoding='utf-8')) if COLORS_FILE.exists() else list(COMBOS['siri'])
+GLOW = json.loads(COLORS_FILE.read_text(encoding='utf-8')) if COLORS_FILE.exists() else list(COMBOS['node'])
 STYLE = {'version': 0}  # sube cada vez que cambian los colores: la cápsula los vuelve a cargar
 TOP, BOTTOM = '#181d36', '#07080f'  # el vidrio, arriba y abajo
 SPHERE = '#140b2a'                  # el fondo del orbe
@@ -1266,7 +1267,7 @@ def feeling(request):
     o cualquier idea ("atardecer en la playa"), que se la pasa a la IA para que elija los colores."""
     words = unicodedata.normalize('NFD', request.lower()).encode('ascii', 'ignore').decode()
     if not words.strip():
-        return (t('Colores actuales: {dato}.\nCombos: {dato2}.\nEjemplos: /feeling rojo azul verde · /feeling #ff0000 #00ff88 · /feeling fuego · /feeling atardecer en la playa. Con /feeling siri vuelves a los originales.', dato=' '.join(GLOW), dato2=', '.join(COMBOS)))
+        return (t('Colores actuales: {dato}.\nCombos: {dato2}.\nEjemplos: /feeling rojo azul verde · /feeling #ff0000 #00ff88 · /feeling fuego · /feeling atardecer en la playa. Con /feeling node vuelves a los de fábrica.', dato=' '.join(GLOW), dato2=', '.join(COMBOS)))
     combo = next((COMBOS[name] for name in COMBOS if re.search(rf'\b{name}\b', words)), None)
     colors = combo or [color.lower() for color in re.findall(r'#[0-9a-f]{6}\b', words)] + \
         [NAMES[word] for word in re.findall(r'[a-z]+', words) if word in NAMES]
@@ -1469,7 +1470,7 @@ def window():
     panel.withdraw()
     panel_layer = Layered(panel)
 
-    state = {'mood': 'idle', 'phase': 0.0, 'clock': 0.0, 'bright': 0.45, 'level': 0.0, 'timer': None, 'shown': False, 'text': '', 'caret': True,
+    state = {'mood': 'idle', 'phase': 0.0, 'clock': 0.0, 'bright': 0.45, 'level': 0.0, 'shown': False, 'text': '', 'caret': True,
              'tint': 1.0, 'flash': 0.0, 'waiting': False}  # tint: 0 orbe gris, 1 con sus colores
 
     def mood(name):
@@ -1480,8 +1481,6 @@ def window():
             return hide()
         state['mood'] = name
         refresh_hint()
-        if name == 'idle':
-            schedule_hide(state.pop('hold', 10))  # una tarjeta (el clima) o un aviso quedan más tiempo
 
     def refresh_hint(_event=None):
         """Muestra lo escrito (con el cursor) o, si no hay nada, el aviso del estado."""
@@ -1513,7 +1512,6 @@ def window():
 
     def on_key(event):
         """Escribir en la cápsula: letras, borrar, pegar (Ctrl+V) y Enter."""
-        cancel_hide()
         if event.keysym in PAGE_KEYS:  # flechas y Re Pág / Av Pág: deslizan el texto largo del panel
             return scroll(PAGE_KEYS[event.keysym])
         if event.keysym == 'Return':
@@ -1588,7 +1586,6 @@ def window():
             then()
 
     def appear():
-        cancel_hide()
         if not state['shown']:
             state['shown'] = True
             root.geometry(f'+{x - margin}+{-height - 2 * margin}')
@@ -1600,20 +1597,10 @@ def window():
         root.focus_force()
 
     def hide(_event=None):
-        cancel_hide()
         panel.withdraw()
         if state['shown']:
             state['shown'] = False
             slide(-height - margin, root.withdraw)
-
-    def schedule_hide(seconds=10):
-        cancel_hide()
-        state['timer'] = root.after(seconds * 1000, hide)
-
-    def cancel_hide():
-        if state['timer']:
-            root.after_cancel(state['timer'])
-            state['timer'] = None
 
     def show(message):
         root.after(0, lambda: show_now(message))
@@ -1629,8 +1616,6 @@ def window():
         state['page'] = {'glass': backdrop, 'base': backdrop.frame(0.15, 0.3), 'mask': page[..., 1:2] / 255,
                          'view': view, 'offset': 0, 'end': full - view}
         draw_page()
-        if full > view:
-            state['hold'] = 40  # para leer con calma (deslizar también lo mantiene abierto)
 
     def draw_page():
         page = state['page']
@@ -1665,8 +1650,6 @@ def window():
         if offset != page['offset']:
             page['offset'] = offset
             draw_page()
-        if state['mood'] == 'idle':  # mientras lees no se esconde
-            schedule_hide(40)
 
     def put_panel(image):
         panel.geometry(f'{width}x{image.shape[0]}+{x}+{top + height + px(8)}')
@@ -1684,7 +1667,6 @@ def window():
             image, cover = draw(width, px, ink)
             state.pop('page', None)  # la rueda ya no desliza un texto viejo por encima de la tarjeta
             put_panel(bgra(image, cover))
-            state['hold'] = 25
         root.after(0, now)
 
     def announce(text):
@@ -1694,7 +1676,6 @@ def window():
             appear()
             show_now(text)
             set_mood('speak')
-            state['hold'] = 20
             threading.Thread(target=lambda: (winsound.Beep(1046, 150), winsound.Beep(1318, 200), speak(text),
                                              mood('idle')), daemon=True).start()
         root.after(0, now)
@@ -1753,7 +1734,6 @@ def window():
         if text.lower().strip('.!') in ('salir', 'cerrar node assistant'):
             quit_all()
         elif text and not busy.locked():
-            cancel_hide()
             threading.Thread(target=run, args=(text, show, mood), daemon=True).start()
 
     # Para los plugins (como /setup): llamar a Node, mostrar algo, salir, y usar Tk desde su hilo.
@@ -1843,7 +1823,7 @@ def help_text(_rest=''):
 
 command('/help', t('esta lista de comandos'), help_text)
 command('/usage', t('qué plataforma de IA está usando Node y cuánto cupo gratis le queda'), lambda _rest: usage())
-command('/feeling', t('cambia los colores de la cápsula: /feeling fuego, /feeling rojo azul verde, /feeling siri'),
+command('/feeling', t('cambia los colores de la cápsula: /feeling fuego, /feeling rojo azul verde, /feeling node'),
         feeling)
 command('/mictoggle', t('apaga el micrófono (modo solo texto) o lo vuelve a prender'), lambda _rest: mic_toggle())
 command('/micavailtogg', t('micrófono siempre listo (capta al instante) o solo al apretar Ctrl+Alt+N'),

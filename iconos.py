@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-GLOW = ['#ff3d81', '#ff8a3d', '#b84dff', '#3d7bff', '#2de2ff']  # los colores originales de la cápsula (combo siri)
+GLOW = ['#2d6bff', '#5cc8ff', '#00e5ff']  # los colores de fábrica de la cápsula (combo node)
 TOP, BOTTOM, SPHERE = '#181d36', '#07080f', '#140b2a'
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 SHARP = 4  # se dibuja 4 veces más grande y se achica: bordes suaves
@@ -20,9 +20,9 @@ def rgb(color):
 
 
 def lights(x, y, cx, cy, size):
-    """Las tres luces de colores del orbe (rosa, violeta, cian) alrededor del centro."""
+    """Las tres luces de colores del orbe alrededor del centro (repartidas en la ronda de GLOW)."""
     total = np.zeros(x.shape + (3,), np.float32)
-    for i, color in enumerate((GLOW[0], GLOW[2], GLOW[4])):
+    for i, color in enumerate(GLOW[len(GLOW) * k // 3] for k in range(3)):
         angle = 0.9 + i * 2.1
         bx, by = cx + 0.45 * size * math.cos(angle), cy + 0.45 * size * math.sin(angle)
         total += rgb(color) * np.exp(-((x - bx) ** 2 + (y - by) ** 2) / (2 * (0.5 * size) ** 2))[..., None]
