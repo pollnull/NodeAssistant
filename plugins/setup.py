@@ -844,6 +844,12 @@ def slider(body, key, text, low, high, default, about=''):
         label(body, node.t(about), font=TINY)
 
 
+def warm_up():
+    """Carga la voz elegida en segundo plano, para que la primera respuesta no espere (Kokoro tarda unos segundos)."""
+    if node.saved('voice_engine') == 'kokoro' and node.kokoro_ready():
+        threading.Thread(target=lambda: node.model('kokoro'), daemon=True).start()
+
+
 def try_voice():
     threading.Thread(target=node.speak, args=(node.t('Así sueno. Todos los sistemas en orden.'),), daemon=True).start()
 
@@ -855,7 +861,8 @@ def voice_engine_block(body, choice):
     for value, text in ENGINES:
         tk.Radiobutton(body, text=node.t(text), variable=engine, value=value, bg=BG, fg=FG, selectcolor=FIELD,
                        font=SMALL, activebackground=BG, activeforeground=FG, anchor='w',
-                       command=lambda: (node.save('voice_engine', engine.get()), WINDOW['show']())).pack(fill='x')
+                       command=lambda: (node.save('voice_engine', engine.get()), warm_up(), WINDOW['show']())
+                       ).pack(fill='x')
     status = label(body, '')
     chosen = engine.get()
     if chosen == 'kokoro':

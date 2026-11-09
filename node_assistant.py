@@ -506,7 +506,8 @@ def agent(text, mood=lambda _: None, where='pc'):
             results.append(result)
             messages.append({'role': 'tool', 'tool_call_id': call['id'], 'content': str(result)[:3000]})
         quick = all(call['function']['name'] in QUICK for call in calls)
-        if round_ == 0 and quick and not skills and not MANY.search(text.lower()):
+        asked = [skill for skill in skills if not skill['always']]  # las de estilo (siempre) no piden otra vuelta
+        if round_ == 0 and quick and not asked and not MANY.search(text.lower()):
             return ' '.join(results), steps  # una orden simple: la confirmación de la herramienta alcanza
     return ' '.join(results), steps
 
@@ -671,8 +672,16 @@ def model(name):
         if name == 'ears':
             _models[name] = WhisperModel(HEARING, device='cpu', compute_type='int8')
         elif name == 'kokoro':  # solo si la elegiste: no hace falta tenerla instalada
+            import onnxruntime
             from kokoro_onnx import Kokoro
-            _models[name] = Kokoro(str(KOKORO_DIR / 'kokoro-v1.0.int8.onnx'), str(KOKORO_DIR / 'voices-v1.0.bin'))
+            # 4 hilos: casi igual de rápido que todos con la PC fresca, y 2,5 veces más rápido cuando la laptop se
+            # calienta y baja la velocidad (con todos los núcleos, los lentos frenan a los rápidos). Medido.
+            options = onnxruntime.SessionOptions()
+            options.intra_op_num_threads = 4
+            session = onnxruntime.InferenceSession(str(KOKORO_DIR / 'kokoro-v1.0.int8.onnx'), options,
+                                                   providers=['CPUExecutionProvider'])
+            _models[name] = Kokoro.from_session(session, str(KOKORO_DIR / 'voices-v1.0.bin'))
+            _models[name].create('Hola.', voice=kokoro_voices_all(_models[name])[0], lang='es')  # la primera es lenta
         else:
             _models[name] = PiperVoice.load(VOICE)
     return _models[name]
@@ -914,10 +923,27 @@ def kokoro_ready():
     return LANGUAGE in KOKORO_LANGS and all((KOKORO_DIR / name).exists() for name in KOKORO_FILES)
 
 
+def kokoro_voices_all(kokoro):
+    return sorted(kokoro.get_voices())
+
+
 def kokoro_voices():
     """Las voces de Kokoro para tu idioma."""
     prefixes = KOKORO_LANGS.get(LANGUAGE, ('', ()))[1]
     return sorted(v for v in model('kokoro').get_voices() if v.startswith(prefixes)) if kokoro_ready() else []
+
+
+def pieces(text):
+    """El texto en pedazos para hablar: por frases y, si una es larga, por comas. El primero, corto: la voz tarda en
+    generarlo según su largo, y es lo que se espera antes de oír algo."""
+    parts = []
+    for sentence in (part for part in re.split(r'(?<=[.!?…;:])\s+', text) if part.strip()):
+        limit = 50 if not parts else 140
+        while len(sentence) > limit and (cut := sentence.find(', ', 20, limit + 40)) > 0:
+            parts.append(sentence[:cut + 1])
+            sentence, limit = sentence[cut + 2:], 140
+        parts.append(sentence)
+    return parts or [text]
 
 
 def eleven(sentence):
@@ -967,7 +993,7 @@ def speak(text):
     if saved('voz_off'):  # voz apagada: solo texto
         return
     text = re.sub(r'[*#_`]', '', text)  # sin los símbolos de formato que llama3.2 a veces agrega
-    sentences = [part for part in re.split(r'(?<=[.!?…;:])\s+', text) if part.strip()] or [text]
+    sentences = pieces(text)
     ready = queue.Queue()
 
     def make():
