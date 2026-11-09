@@ -693,11 +693,35 @@ def starts_with_windows():
         return False
 
 
+WAIT_FOR_DRIVE = '''' Abre Node Assistant al iniciar sesion cuando su disco ya esta conectado (si no aparece en 2 minutos, nada).
+Set fs = CreateObject("Scripting.FileSystemObject")
+For i = 1 To 60
+  If fs.FileExists("{exe}") Then
+    CreateObject("WScript.Shell").Run "{command}", 0, False
+    WScript.Quit
+  End If
+  WScript.Sleep 2000
+Next
+'''
+
+
+def startup_command():
+    """Node en el disco de Windows arranca directo. En otro disco (un SSD externo) arranca por un script en C: que
+    espera a que el disco esté: así Windows no da error si todavía no se montó o no está conectado."""
+    if node.HERE.drive.upper() == os.environ.get('SystemDrive', 'C:').upper():
+        return node.launch_command()
+    script = Path(os.environ['LOCALAPPDATA']) / 'NodeAssistant' / 'inicio.vbs'
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(WAIT_FOR_DRIVE.format(exe=sys.executable, command=node.launch_command().replace('"', '""')),
+                      encoding='mbcs')  # wscript lee el script en ANSI
+    return f'"{Path(os.environ["WINDIR"]) / "System32" / "wscript.exe"}" "{script}"'
+
+
 def set_startup(on):
     """Que Windows abra Node al iniciar sesión (como un programa más en Inicio de la Configuración de Windows)."""
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
         if on:
-            winreg.SetValueEx(key, 'NodeAssistant', 0, winreg.REG_SZ, node.launch_command())
+            winreg.SetValueEx(key, 'NodeAssistant', 0, winreg.REG_SZ, startup_command())
         elif starts_with_windows():
             winreg.DeleteValue(key, 'NodeAssistant')
 
