@@ -407,12 +407,12 @@ def plain(text):
     return unicodedata.normalize('NFD', text.lower()).encode('ascii', 'ignore').decode()
 
 
-def pick_tools(text):
+def pick_tools(text, every=False):
     """Las herramientas para esta orden (sin las que apagaste en /settings → Herramientas). Mira también lo anterior
-    que dijiste ("y bájale más")."""
+    que dijiste ("y bájale más"). every=True: todas las prendidas, sin el ahorro de cupo."""
     off = set(saved('tools_off', []))
     tools = [tool_ for tool_ in TOOLS if tool_['function']['name'] not in off]
-    if not SAVE_QUOTA:
+    if not SAVE_QUOTA or every or LANGUAGE != 'es':  # las pistas están en español: en otro idioma van todas (~4K tokens)
         return tools
     said = plain(text + ' ' + ' '.join(turn['content'] for turn in HISTORY[-2:] if turn['role'] == 'user'))
     return [tool_ for tool_ in tools if (found := TOOL_HINTS.get(tool_['function']['name'])) is None
@@ -466,6 +466,11 @@ def skills_for(text):
 QUICK = {'open', 'spotify', 'youtube', 'web_search', 'volume', 'media', 'folder', 'screenshot', 'lock', 'colors',
          'time', 'remember'}  # sin datos que pensar: con una sola orden de estas, Node contesta sin otra vuelta (más rápido)
 ROUNDS = 6  # vueltas máximas: buscar, mirar el resultado, decidir el paso siguiente…
+# "No puedo hacer eso" en los 6 idiomas (sin tildes, como lo deja plain()): con eso se reintenta con todas las herramientas
+CANT = re.compile(r"\bno (?:puedo|es posible|tengo|dispongo|cuento)|\b(?:herramientas|comandos|funciones) disponibles"
+                  r"|can'?t|cannot|unable to|not (?:able|possible)|(?:do not|don'?t) have|available tools"
+                  r"|\bnao (?:posso|e possivel|consigo|tenho)|ne (?:peux|suis) pas|impossible|pas possible"
+                  r"|\bnon (?:posso|e possibile|riesco|ho)|kann (?:ich )?(?:das )?nicht|nicht moglich|keine? (?:moglichkeit|werkzeug|zugriff)")
 
 
 def step_for(call):
@@ -506,6 +511,10 @@ def agent(text, mood=lambda _: None, where='pc'):
                 raise  # sin nada hecho: handle() sigue con las reglas y Laya
             return ' '.join(results), steps  # se cortó la nube a mitad de camino: lo que ya se hizo
         calls = message.get('tool_calls') or []
+        if not calls and not steps and CANT.search(plain(message.get('content') or '')) \
+                and len(tools) < len(everything := pick_tools(text, every=True)):
+            tools = everything  # dijo "no puedo": quizá la herramienta quedó afuera por el ahorro de cupo (otras palabras, otro idioma)
+            continue
         if not calls:
             return tidy(message.get('content')) or ' '.join(results), steps or [('say', tidy(message.get('content')))]
         messages.append({'role': 'assistant', 'content': message.get('content') or '', 'tool_calls': calls})

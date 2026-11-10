@@ -147,5 +147,6 @@ def setup(node_):
                        '(solo señalar, "¿dónde está...?"), click, double_click o right_click.',
                        target={'type': 'string'},
                        action={'type': 'string', 'enum': ['point', 'click', 'double_click', 'right_click']}),
-             point, r'clic|click|toca|aprieta|presiona|seleccion|donde esta|donde queda|senal|mouse|cursor|encontr')
+             point, r'clic|click|toca|aprieta|presiona|seleccion|donde esta|donde queda|senal|mouse|cursor|encontr|raton|puntero|'
+                  r'flecha|pointer|souris|maus|mueve el|move the')
     node.WAITING.append(answer)
