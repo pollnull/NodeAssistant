@@ -295,7 +295,7 @@ def cloud(messages, vision=False, wait=8, only=None, **extra):
             continue
         url = provider['url'].format(account=secret('CLOUDFLARE_ACCOUNT_ID'))
         body = json.dumps({'model': model_, 'temperature': TEMPERATURE,
-                           'max_tokens': 300,
+                           'max_tokens': 1000,  # los modelos que piensan (Gemini, gpt-oss) gastan parte acá: con menos, cortan o devuelven vacío
                            'messages': messages, **provider.get('extra', {}), **extra}).encode()
         request = urllib.request.Request(url, body, {
             'Content-Type': 'application/json', 'Authorization': f'Bearer {key}', 'User-Agent': 'NodeAssistant'})
